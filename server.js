@@ -691,7 +691,6 @@ if (!HOST_PORT) {
 }
 const roomHistory = {};
 const MAX_HISTORY = 50;
-const DEMO_ROOMS = new Set(["r1", "r2", "r3", "r4", "r5", "r6"]);
 
 /* ================= Real live video — WebRTC signalling ================= */
 // Video server par save nahi hoti — server sirf signalling messages aage bhejta hai.
@@ -702,7 +701,7 @@ const liveRooms = {}; // roomId -> { hostId, title, host, cat, cover }
 const socketRoom = {}; // socketId -> roomId (signalling validation ke liye)
 
 function validRoomId(roomId){
-  return typeof roomId === "string" && (DEMO_ROOMS.has(roomId) || roomId.startsWith("live-"));
+  return typeof roomId === "string" && roomId.startsWith("live-"); // v19: real rooms only
 }
 function isHostOf(sockId, roomId){
   return !!liveRooms[roomId] && liveRooms[roomId].hostId === sockId;
@@ -715,7 +714,7 @@ function endLiveRoom(roomId){
 
 /* ================= v8: Report/Block enforcement (server-side) ================= */
 // Har socket ka username sock.data.userName mein rehta hai — client "identify"
-// event se bhejta hai; demo rooms mein chat karne wale ka naam fallback hai.
+// event se bhejta hai.
 // Live list / live started: wo room chhupayein jahan viewer ne host ko block
 // kiya ho YA host ne viewer ko block kiya ho. Chat: har viewer ko alag se
 // bhejein — jis ne sender ko block kiya hai use message nahi milta.
@@ -774,7 +773,7 @@ io.on("connection", (sock) => {
 
   sock.on("join room", (roomId) => {
     if (typeof roomId !== "string") return;
-    if (!DEMO_ROOMS.has(roomId) && !roomId.startsWith("live-")) return;
+    if (!roomId.startsWith("live-")) return; // v19: real rooms only
     // v8: live room mein join nahi — agar host ne joiner ko block kiya ho
     // ya joiner ne host ko block kiya ho.
     const live = liveRooms[roomId];
