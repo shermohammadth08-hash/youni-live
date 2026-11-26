@@ -84,6 +84,8 @@
         display: grid; place-items: center;
       }
       .brandmark .dot svg { width: 17px; height: 17px; }
+      .brandmark .brand-img { width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto; display: block; }
+      .auth-logo .brand-img { width: 42px; height: 42px; border-radius: 12px; flex: 0 0 auto; display: block; }
       .brandmark h1 { font-size: 1.12rem; margin: 0; letter-spacing: -.01em; white-space: nowrap; }
       .brandmark h1 span { color: var(--brand); }
       .demo-tag {
@@ -536,9 +538,7 @@
       <!-- ===== Top bar ===== -->
       <header class="topbar">
         <div class="brandmark">
-          <span class="dot" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5z"/></svg>
-          </span>
+          <img class="brand-img" src="/icon-192.png" alt="">
           <h1>Chai <span>Live</span></h1>
         </div>
         <div class="spacer"></div>
@@ -555,9 +555,7 @@
           <div class="auth-wrap">
             <div class="auth-card">
               <div class="auth-logo">
-                <span class="dot" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5z"/></svg>
-                </span>
+                <img class="brand-img" src="/icon-192.png" alt="">
                 <h1>Chai <span>Live</span></h1>
               </div>
               <h2>Log in or Sign up</h2>
