@@ -284,6 +284,8 @@
       .stat b { display: block; font-size: 1.05rem; }
       .follow-row { padding: .55rem .2rem; border-bottom: 1px solid #eee; cursor: pointer; font-weight: 600; }
       .stat span { font-size: .72rem; color: var(--ink-soft); }
+      .level-bar { height: 8px; background: #ececf1; border-radius: 99px; overflow: hidden; margin-top: .8rem; }
+      .level-fill { height: 100%; background: #f5b301; width: 0%; }
       .wallet {
         margin-top: .8rem; background: var(--surface); border: 1px solid var(--line);
         border-radius: 18px; padding: 1rem;
@@ -635,7 +637,7 @@
                 <h2 id="profileName">Younus</h2>
                 <p id="profileId">ID: ...</p>
                 <p id="profileLoc">Location off</p>
-                <span class="level">Level 12 · Host</span>
+                <span class="level" id="profileLevel">Level 1</span>
               </div>
             </div>
             <div class="stats">
@@ -643,6 +645,8 @@
               <div class="stat" id="statFollowingWrap"><b id="statFollowing">0</b><span>Following</span></div>
               <div class="stat"><b id="statBeans">0</b><span>Beans (earned)</span></div>
             </div>
+            <div class="level-bar"><div class="level-fill" id="levelFill" style="width:0%"></div></div>
+            <p class="note" id="levelText">0 XP · 100 XP to Level 2</p>
             <div class="wallet">
               <div class="row">
                 <div>
@@ -667,6 +671,7 @@
               <h3>My Past Lives</h3>
               <div id="historyList"><p class="hist-empty">No lives yet. Start your first live!</p></div>
             </div>
+            <button class="btn-auth-secondary" id="settingsBtn" type="button">Settings</button>
             <button class="btn-auth-secondary" id="blockedBtn" type="button">Blocked users</button>
             <button class="btn-auth-secondary" id="reportsBtn" type="button">Reports</button>
             <button class="btn-logout" id="logoutBtn" type="button">Log out</button>
@@ -690,6 +695,66 @@
             <p class="sub" style="color:var(--ink-soft);font-size:.88rem;margin:0 0 1rem;line-height:1.5">Reports sent by users. In this version any logged-in user can see them.</p>
             <div id="reportsList"></div>
             <button class="btn-auth-secondary" id="reportsBackBtn" type="button">Back to Profile</button>
+          </div>
+        </section>
+
+        <!-- ===== SETTINGS (v14) ===== -->
+        <section class="screen" id="screen-settings">
+          <div class="profile-wrap">
+            <h2 style="font-size:1.25rem;margin:.2rem 0 .3rem">Settings</h2>
+            <div class="wallet">
+              <div class="row">
+                <div>
+                  <h3>Location</h3>
+                  <p class="bal" id="settingsLocationText">Off</p>
+                </div>
+                <button class="btn-gold" id="settingsLocationBtn" type="button">Turn on</button>
+              </div>
+              <p class="note">Turn on location to show your real city and country on your profile, like Bigo.</p>
+            </div>
+            <div class="wallet">
+              <div class="row">
+                <div>
+                  <h3>Private account</h3>
+                  <p class="bal" id="privateText">Off</p>
+                </div>
+                <button class="btn-gold" id="privateBtn" type="button">Turn on</button>
+              </div>
+              <p class="note">When on, other users can't see your location or your followers / following lists.</p>
+            </div>
+            <div class="wallet">
+              <div class="row">
+                <div>
+                  <h3>Let anyone follow me</h3>
+                  <p class="bal" id="allowFollowText">On</p>
+                </div>
+                <button class="btn-gold" id="allowFollowBtn" type="button">Turn off</button>
+              </div>
+              <p class="note">When off, nobody new can follow you.</p>
+            </div>
+            <button class="btn-auth-secondary" id="settingsBlockedBtn" type="button">Blocked users</button>
+            <button class="btn-auth-secondary" id="settingsReportsBtn" type="button">Reports</button>
+            <button class="btn-auth-secondary" id="privacyPolicyBtn" type="button">Privacy Policy</button>
+            <div class="wallet">
+              <div class="row">
+                <div>
+                  <h3>About</h3>
+                  <p class="bal">Chai Live · Version 14</p>
+                </div>
+              </div>
+              <p class="note">Live video, chat, gifts and friends — made for everyone.</p>
+            </div>
+            <button class="btn-logout" id="settingsLogoutBtn" type="button">Log out</button>
+            <button class="btn-auth-secondary" id="settingsBackBtn" type="button">Back to Profile</button>
+          </div>
+        </section>
+
+        <!-- ===== PRIVACY POLICY (v14) ===== -->
+        <section class="screen" id="screen-privacy">
+          <div class="profile-wrap">
+            <h2 style="font-size:1.25rem;margin:.2rem 0 .3rem">Privacy Policy</h2>
+            <p class="sub" style="color:var(--ink-soft);font-size:.88rem;margin:0 0 1rem;line-height:1.6">Chai Live stores your account name, a scrambled password, your coins, beans, gifts, followers and level on the app server so your account survives restarts. Your location (city and country) is saved ONLY when you turn Location on yourself, and it is hidden again when you turn it off. A private account hides your location and your followers / following lists from other users. Blocked users can't send you chat messages or join your live. Reports are used only to keep the app safe. Your live video is never recorded or saved on the server.</p>
+            <button class="btn-auth-secondary" id="privacyBackBtn" type="button">Back to Settings</button>
           </div>
         </section>
       </div>
@@ -928,6 +993,16 @@
             $("profileLoc").textContent = loc;
             $("locationText").textContent = loc;
             $("locationBtn").textContent = d.locationOn ? "Turn off" : "Turn on";
+            $("settingsLocationText").textContent = loc;
+            $("settingsLocationBtn").textContent = d.locationOn ? "Turn off" : "Turn on";
+            /* v14: asli Level + XP bar + privacy toggles. */
+            $("profileLevel").textContent = "Level " + d.level + ((d.livesHosted || 0) > 0 ? " · Host" : "");
+            $("levelFill").style.width = (d.level >= 100 ? 100 : ((d.xp || 0) % 100)) + "%";
+            $("levelText").textContent = (d.xp || 0) + " XP · " + (d.level >= 100 ? "Max level reached" : (d.xpToNext + " XP to Level " + (d.level + 1)));
+            $("privateText").textContent = d.privateAccount ? "On" : "Off";
+            $("privateBtn").textContent = d.privateAccount ? "Turn off" : "Turn on";
+            $("allowFollowText").textContent = d.allowFollow === false ? "Off" : "On";
+            $("allowFollowBtn").textContent = d.allowFollow === false ? "Turn on" : "Turn off";
           }).catch(function(){});
       }
       /* v12: Asli coins/beans server se lein (naye user ko 1000 welcome coins,
@@ -1554,11 +1629,16 @@
       function endLive(){
         if (!room) return;
         // Camera band karein, viewers ko batayein live khatam ho gaya
+        var wasLiveRoom = !!myLiveRoomId;
         if (myLiveRoomId && socket) socket.emit("end live", { room: myLiveRoomId });
         closeHostPCs();
         stopCamera();
         hideRoomVideo();
         myLiveRoomId = null;
+        /* v14: live khatam — host ko +20 XP (server par). */
+        if (wasLiveRoom && currentUser && window.location.protocol !== "file:") {
+          fetch("/api/live-ended", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName() }) }).catch(function(){});
+        }
         var dur = room.elapsed, totalViewers = room.viewers + rand(8, 30);
         var gifts = room.gifts, giftValue = room.giftValue;
         var title = room.data.title;
@@ -1627,11 +1707,7 @@
             else toast(d && d.error ? d.error : "Location could not be saved.");
           }).catch(function(){ toast("Location could not be saved — check your connection."); });
       }
-      $("locationBtn").addEventListener("click", function(){
-        if (!currentUser) { toast("Log in first."); return; }
-        if (window.location.protocol === "file:") { toast("Open the live app link to use location."); return; }
-        var turningOn = $("locationBtn").textContent === "Turn on";
-        if (!turningOn) { saveLocation(false, "", ""); return; }
+      function turnLocationOn(){
         if (!navigator.geolocation) { toast("Location is not supported on this device."); return; }
         toast("Getting your location…");
         navigator.geolocation.getCurrentPosition(function(pos){
@@ -1643,7 +1719,31 @@
               saveLocation(true, country, city);
             }).catch(function(){ toast("Could not find your city — try again."); });
         }, function(){ toast("Location permission denied — allow location to show your city and country."); }, { timeout: 10000 });
-      });
+      }
+      function locationToggle(btn){
+        if (!currentUser) { toast("Log in first."); return; }
+        if (window.location.protocol === "file:") { toast("Open the live app link to use location."); return; }
+        if (btn.textContent === "Turn on") turnLocationOn();
+        else saveLocation(false, "", "");
+      }
+      $("locationBtn").addEventListener("click", function(){ locationToggle(this); });
+      $("settingsLocationBtn").addEventListener("click", function(){ locationToggle(this); });
+
+      /* v14: Privacy toggles save karein. */
+      function savePrivacy(patch){
+        if (!currentUser) { toast("Log in first."); return; }
+        if (window.location.protocol === "file:") { toast("Open the live app link to change this."); return; }
+        var body = { name: myName() };
+        if (typeof patch.privateAccount === "boolean") body.privateAccount = patch.privateAccount;
+        if (typeof patch.allowFollow === "boolean") body.allowFollow = patch.allowFollow;
+        fetch("/api/privacy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (d && d.ok) { refreshProfile(); toast("Settings saved."); }
+            else toast(d && d.error ? d.error : "Could not be saved.");
+          }).catch(function(){ toast("Could not be saved — check your connection."); });
+      }
+      $("privateBtn").addEventListener("click", function(){ savePrivacy({ privateAccount: this.textContent === "Turn on" }); });
+      $("allowFollowBtn").addEventListener("click", function(){ savePrivacy({ allowFollow: this.textContent === "Turn on" }); });
 
       /* ================= Wallet ================= */
       /* v12: Rozana 500 free coins — ek din mein ek dafa (server check karta hai).
@@ -1907,6 +2007,23 @@
       $("reportsBtn").addEventListener("click", openReports);
       $("blockedBackBtn").addEventListener("click", function(){ showScreen("profile"); });
       $("reportsBackBtn").addEventListener("click", function(){ showScreen("profile"); });
+
+      /* v14: Settings screen. */
+      $("settingsBtn").addEventListener("click", function(){ refreshProfile(); showScreen("settings"); });
+      $("settingsBackBtn").addEventListener("click", function(){ showScreen("profile"); });
+      $("settingsBlockedBtn").addEventListener("click", openBlocked);
+      $("settingsReportsBtn").addEventListener("click", openReports);
+      $("privacyPolicyBtn").addEventListener("click", function(){ showScreen("privacy"); });
+      $("privacyBackBtn").addEventListener("click", function(){ showScreen("settings"); });
+      $("settingsLogoutBtn").addEventListener("click", function(){
+        currentUser = null;
+        clearUser();
+        $("authPass").value = "";
+        showAuthError("");
+        lockApp();
+        showScreen("auth");
+        toast("Logged out.");
+      });
 
       /* ================= Init ================= */
       renderChips();

@@ -83,8 +83,14 @@ function normalizeUser(u, users) {
   if (typeof u.country !== "string") { u.country = ""; changed = true; }
   if (typeof u.city !== "string") { u.city = ""; changed = true; }
   if (typeof u.locationOn !== "boolean") { u.locationOn = false; changed = true; }
+  if (typeof u.xp !== "number") { u.xp = 0; changed = true; }
+  if (typeof u.livesHosted !== "number") { u.livesHosted = 0; changed = true; }
+  if (typeof u.privateAccount !== "boolean") { u.privateAccount = false; changed = true; }
+  if (typeof u.allowFollow !== "boolean") { u.allowFollow = true; changed = true; }
   return changed ? u : null;
 }
+// v14: Level — har 100 XP par ek level, Level 1 se shuru, zyada se zyada 100.
+function levelFor(xp) { return Math.min(100, Math.floor((xp || 0) / 100) + 1); }
 function findUserKey(users, name) {
   return Object.keys(users).find((k) => k.toLowerCase() === name.toLowerCase());
 }
@@ -272,7 +278,7 @@ function handleRegister(data, res) {
   const users = loadUsers();
   const taken = Object.keys(users).some((k) => k.toLowerCase() === name.toLowerCase());
   if (taken) return sendJSON(res, 400, { ok: false, error: "This name is already taken — choose another name or log in." });
-  users[name] = { pass: hashPassword(password), created: new Date().toISOString(), id: makeUserId(users), coins: WELCOME_COINS, beans: 0, giftsReceived: 0, lastClaim: "", followers: [], following: [], country: "", city: "", locationOn: false };
+  users[name] = { pass: hashPassword(password), created: new Date().toISOString(), id: makeUserId(users), coins: WELCOME_COINS, beans: 0, giftsReceived: 0, lastClaim: "", followers: [], following: [], country: "", city: "", locationOn: false, xp: 0, livesHosted: 0, privateAccount: false, allowFollow: true };
   if (!saveUsers(users)) {
     delete users[name];
     return sendJSON(res, 500, { ok: false, error: "Account could not be saved — please try again." });
@@ -412,6 +418,8 @@ function handleGift(data, res) {
   users[fromKey].coins -= cost;
   users[toKey].beans += cost;
   users[toKey].giftsReceived += 1;
+  users[toKey].xp = (users[toKey].xp || 0) + Math.max(1, Math.floor(cost / 10)); // v14: gift milna = XP
+  users[fromKey].xp = (users[fromKey].xp || 0) + 1; // v14: gift bhejna = +1 XP
   if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Gift could not be saved — please try again." });
   giftTokens.push({ from: from, to: to, gift: gift, cost: cost, time: Date.now() });
   if (giftTokens.length > 200) giftTokens.splice(0, giftTokens.length - 200);
@@ -432,6 +440,9 @@ function handleGetProfile(req, res) {
   const u = users[key];
   const followers = Array.isArray(u.followers) ? u.followers : [];
   const following = Array.isArray(u.following) ? u.following : [];
+  // v14: private account — doosron se location aur lists chhupayein.
+  const isSelf = viewer && viewer.toLowerCase() === key.toLowerCase();
+  const hidden = !!u.privateAccount && !isSelf;
   let isFollowing = false;
   if (viewer) {
     const vKey = findUserKey(users, viewer);
@@ -441,14 +452,19 @@ function handleGetProfile(req, res) {
       isFollowing = vFollowing.some((n) => n.toLowerCase() === key.toLowerCase());
     }
   }
+  const xp = u.xp || 0;
   sendJSON(res, 200, {
     ok: true, name: key, id: u.id,
     followers: followers.length, following: following.length,
-    followersList: followers.slice(0, 200), followingList: following.slice(0, 200),
+    followersList: hidden ? [] : followers.slice(0, 200),
+    followingList: hidden ? [] : following.slice(0, 200),
     beans: u.beans || 0, giftsReceived: u.giftsReceived || 0,
-    country: u.locationOn ? (u.country || "") : "",
-    city: u.locationOn ? (u.city || "") : "",
-    locationOn: !!u.locationOn, isFollowing: isFollowing
+    country: (u.locationOn && !hidden) ? (u.country || "") : "",
+    city: (u.locationOn && !hidden) ? (u.city || "") : "",
+    locationOn: !!u.locationOn && !hidden, isFollowing: isFollowing,
+    xp: xp, level: levelFor(xp), xpToNext: levelFor(xp) >= 100 ? 0 : 100 - (xp % 100),
+    livesHosted: u.livesHosted || 0,
+    privateAccount: !!u.privateAccount, allowFollow: u.allowFollow !== false
   });
 }
 
@@ -466,12 +482,16 @@ function handleFollow(data, res, unfollow) {
   if (!toKey) return sendJSON(res, 400, { ok: false, error: "User not found — only real accounts can be followed." });
   normalizeUser(users[fromKey], users);
   normalizeUser(users[toKey], users);
+  if (!unfollow && users[toKey].allowFollow === false) return sendJSON(res, 400, { ok: false, error: "This user does not accept new followers." });
   if (unfollow) {
     users[fromKey].following = users[fromKey].following.filter((n) => n.toLowerCase() !== toKey.toLowerCase());
     users[toKey].followers = users[toKey].followers.filter((n) => n.toLowerCase() !== fromKey.toLowerCase());
   } else {
     if (!users[fromKey].following.some((n) => n.toLowerCase() === toKey.toLowerCase())) users[fromKey].following.push(toKey);
-    if (!users[toKey].followers.some((n) => n.toLowerCase() === fromKey.toLowerCase())) users[toKey].followers.push(fromKey);
+    if (!users[toKey].followers.some((n) => n.toLowerCase() === fromKey.toLowerCase())) {
+      users[toKey].followers.push(fromKey);
+      users[toKey].xp = (users[toKey].xp || 0) + 5; // v14: naya follower = +5 XP
+    }
   }
   if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Could not be saved — please try again." });
   sendJSON(res, 200, { ok: true, isFollowing: !unfollow, followers: users[toKey].followers.length, following: users[fromKey].following.length });
@@ -494,10 +514,38 @@ function handleLocation(data, res) {
   sendJSON(res, 200, { ok: true, locationOn: users[key].locationOn, country: users[key].country, city: users[key].city });
 }
 
+// v14: Live khatam — host ko +20 XP aur livesHosted +1.
+function handleLiveEnded(data, res) {
+  const name = cleanName(data.name);
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  const users = loadUsers();
+  const key = findUserKey(users, name);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name — please sign up first." });
+  normalizeUser(users[key], users);
+  users[key].xp = (users[key].xp || 0) + 20;
+  users[key].livesHosted = (users[key].livesHosted || 0) + 1;
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Could not be saved — please try again." });
+  sendJSON(res, 200, { ok: true, xp: users[key].xp, level: levelFor(users[key].xp), livesHosted: users[key].livesHosted });
+}
+
+// v14: Privacy settings — private account aur follow ki ijazat.
+function handlePrivacy(data, res) {
+  const name = cleanName(data.name);
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  const users = loadUsers();
+  const key = findUserKey(users, name);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name — please sign up first." });
+  normalizeUser(users[key], users);
+  if (typeof data.privateAccount === "boolean") users[key].privateAccount = data.privateAccount;
+  if (typeof data.allowFollow === "boolean") users[key].allowFollow = data.allowFollow;
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Could not be saved — please try again." });
+  sendJSON(res, 200, { ok: true, privateAccount: !!users[key].privateAccount, allowFollow: users[key].allowFollow !== false });
+}
+
 function handleRequest(req, res) {
   const url = req.url.split("?")[0];
 
-  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift" || url === "/api/follow" || url === "/api/unfollow" || url === "/api/location")) {
+  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift" || url === "/api/follow" || url === "/api/unfollow" || url === "/api/location" || url === "/api/live-ended" || url === "/api/privacy")) {
     readBody(req).then((data) => {
       if (url === "/api/register") handleRegister(data, res);
       else if (url === "/api/login") handleLogin(data, res);
@@ -508,6 +556,8 @@ function handleRequest(req, res) {
       else if (url === "/api/follow") handleFollow(data, res, false);
       else if (url === "/api/unfollow") handleFollow(data, res, true);
       else if (url === "/api/location") handleLocation(data, res);
+      else if (url === "/api/live-ended") handleLiveEnded(data, res);
+      else if (url === "/api/privacy") handlePrivacy(data, res);
       else handleReport(data, res);
     }).catch(() => sendJSON(res, 400, { ok: false, error: "Invalid data sent." }));
     return;
