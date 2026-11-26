@@ -305,6 +305,17 @@
       .menu-row:last-child { border-bottom: none; }
       .menu-row .val { margin-left: auto; font-size: .78rem; color: var(--ink-soft); font-weight: 600; }
       .menu-row .chev { color: var(--ink-soft); }
+      /* v17: Bigo jaisa sliding switch — teal pill, safed knob slide karta hai. */
+      .switch { position: relative; display: inline-block; width: 48px; height: 28px; flex: 0 0 auto; cursor: pointer; }
+      .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+      .switch .slider { position: absolute; inset: 0; background: #c9cdd8; border-radius: 999px; transition: background .2s; }
+      .switch .slider:before { content: ""; position: absolute; width: 22px; height: 22px; left: 3px; top: 3px; background: #fff; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.3); transition: transform .2s; }
+      .switch input:checked + .slider { background: var(--teal); }
+      .switch input:checked + .slider:before { transform: translateX(20px); }
+      .priv-row { display: flex; gap: .8rem; align-items: flex-start; background: var(--surface); border-radius: 16px; padding: .95rem .9rem; margin-top: .7rem; }
+      .priv-row .txt { flex: 1; }
+      .priv-row h3 { margin: 0 0 .25rem; font-size: .95rem; }
+      .priv-row p { margin: 0; font-size: .78rem; color: var(--ink-soft); line-height: 1.45; }
       .profile-card {
         background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
         padding: 1rem; display: flex; gap: .85rem; align-items: center;
@@ -709,7 +720,7 @@
                   <h3>Location</h3>
                   <p class="bal" id="locationText">Off</p>
                 </div>
-                <button class="btn-gold" id="locationBtn" type="button">Turn on</button>
+                <label class="switch"><input type="checkbox" id="locationBtn"><span class="slider"></span></label>
               </div>
               <p class="note">Turn on location to show your real city and country on your profile, like Bigo.</p>
             </div>
@@ -723,10 +734,6 @@
               <h3>My Past Lives</h3>
               <div id="historyList"><p class="hist-empty">No lives yet. Start your first live!</p></div>
             </div>
-            <button class="btn-auth-secondary" id="settingsBtn" type="button">Settings</button>
-            <button class="btn-auth-secondary" id="blockedBtn" type="button">Blocked users</button>
-            <button class="btn-auth-secondary" id="reportsBtn" type="button">Reports</button>
-            <button class="btn-logout" id="logoutBtn" type="button">Log out</button>
           </div>
         </section>
 
@@ -760,7 +767,7 @@
                   <h3>Location</h3>
                   <p class="bal" id="settingsLocationText">Off</p>
                 </div>
-                <button class="btn-gold" id="settingsLocationBtn" type="button">Turn on</button>
+                <label class="switch"><input type="checkbox" id="settingsLocationBtn"><span class="slider"></span></label>
               </div>
               <p class="note">Turn on location to show your real city and country on your profile, like Bigo.</p>
             </div>
@@ -770,7 +777,7 @@
                   <h3>Private account</h3>
                   <p class="bal" id="privateText">Off</p>
                 </div>
-                <button class="btn-gold" id="privateBtn" type="button">Turn on</button>
+                <label class="switch"><input type="checkbox" id="privateBtn"><span class="slider"></span></label>
               </div>
               <p class="note">When on, other users can't see your location or your followers / following lists.</p>
             </div>
@@ -780,11 +787,12 @@
                   <h3>Let anyone follow me</h3>
                   <p class="bal" id="allowFollowText">On</p>
                 </div>
-                <button class="btn-gold" id="allowFollowBtn" type="button">Turn off</button>
+                <label class="switch"><input type="checkbox" id="allowFollowBtn" checked><span class="slider"></span></label>
               </div>
               <p class="note">When off, nobody new can follow you.</p>
             </div>
             <div class="menu-list">
+              <button class="menu-row" id="privacyRow" type="button">Privacy <span class="val">Hide location, online status</span><span class="chev">›</span></button>
               <button class="menu-row" id="accountRow" type="button">Account management <span class="val" id="accountVal">View</span><span class="chev">›</span></button>
               <button class="menu-row" id="videoQualityRow" type="button">Video Quality <span class="val" id="videoQualityVal">Auto (recommended)</span><span class="chev">›</span></button>
               <button class="menu-row" id="darkModeRow" type="button">Dark Mode <span class="val" id="darkModeVal">Use device settings</span><span class="chev">›</span></button>
@@ -813,6 +821,42 @@
             <h2 style="font-size:1.25rem;margin:.2rem 0 .3rem">Privacy Policy</h2>
             <p class="sub" style="color:var(--ink-soft);font-size:.88rem;margin:0 0 1rem;line-height:1.6">Chai Live stores your account name, a scrambled password, your coins, beans, gifts, followers and level on the app server so your account survives restarts. Your location (city and country) is saved ONLY when you turn Location on yourself, and it is hidden again when you turn it off. A private account hides your location and your followers / following lists from other users. Blocked users can't send you chat messages or join your live. Reports are used only to keep the app safe. Your live video is never recorded or saved on the server.</p>
             <button class="btn-auth-secondary" id="privacyBackBtn" type="button">Back to Settings</button>
+          </div>
+        </section>
+
+        <!-- ===== PRIVACY TOGGLES (v17, Bigo jaisi) ===== -->
+        <section class="screen" id="screen-privacy-toggles">
+          <div class="profile-wrap">
+            <h2 style="font-size:1.25rem;margin:.2rem 0 .3rem">Privacy</h2>
+            <div class="priv-row">
+              <div class="txt">
+                <h3>Hide location</h3>
+                <p>After turning this on, your location won't appear in Profile or your live rooms.</p>
+              </div>
+              <label class="switch"><input type="checkbox" id="privHideLocation"><span class="slider"></span></label>
+            </div>
+            <div class="priv-row">
+              <div class="txt">
+                <h3>Hide your online status</h3>
+                <p>After turning this on, your online information will not be displayed.</p>
+              </div>
+              <label class="switch"><input type="checkbox" id="privHideOnline"><span class="slider"></span></label>
+            </div>
+            <div class="priv-row">
+              <div class="txt">
+                <h3>Hide your recent active time</h3>
+                <p>After turning this on, others won't see your recent active time.</p>
+              </div>
+              <label class="switch"><input type="checkbox" id="privHideActive"><span class="slider"></span></label>
+            </div>
+            <div class="priv-row">
+              <div class="txt">
+                <h3>Do not disturb from strangers</h3>
+                <p>After turning this on, you will not be disturbed by any strangers' messages except the official account.</p>
+              </div>
+              <label class="switch"><input type="checkbox" id="privDnd"><span class="slider"></span></label>
+            </div>
+            <button class="btn-auth-secondary" id="privacyTogglesBackBtn" type="button">Back to Settings</button>
           </div>
         </section>
 
@@ -1076,7 +1120,7 @@
       /* v13: Asli profile server se — number ID, asli followers/following, location. */
       function refreshProfile(){
         if (!currentUser || window.location.protocol === "file:") return;
-        fetch("/api/profile?name=" + encodeURIComponent(myName()))
+        fetch("/api/profile?name=" + encodeURIComponent(myName()) + "&viewer=" + encodeURIComponent(myName()))
           .then(function(r){ return r.json(); }).then(function(d){
             if (!d || !d.ok) return;
             lastProfile = d;
@@ -1093,17 +1137,17 @@
             var loc = (d.locationOn && (d.city || d.country)) ? ((d.city ? d.city + ", " : "") + d.country) : "Location off";
             $("profileLoc").textContent = loc;
             $("locationText").textContent = loc;
-            $("locationBtn").textContent = d.locationOn ? "Turn off" : "Turn on";
+            $("locationBtn").checked = !!d.locationOn;
             $("settingsLocationText").textContent = loc;
-            $("settingsLocationBtn").textContent = d.locationOn ? "Turn off" : "Turn on";
+            $("settingsLocationBtn").checked = !!d.locationOn;
             /* v14: asli Level + XP bar + privacy toggles. */
             $("profileLevel").textContent = "Level " + d.level + ((d.livesHosted || 0) > 0 ? " · Host" : "");
             $("levelFill").style.width = (d.level >= 100 ? 100 : ((d.xp || 0) % 100)) + "%";
             $("levelText").textContent = (d.xp || 0) + " XP · " + (d.level >= 100 ? "Max level reached" : (d.xpToNext + " XP to Level " + (d.level + 1)));
             $("privateText").textContent = d.privateAccount ? "On" : "Off";
-            $("privateBtn").textContent = d.privateAccount ? "Turn off" : "Turn on";
+            $("privateBtn").checked = !!d.privateAccount;
             $("allowFollowText").textContent = d.allowFollow === false ? "Off" : "On";
-            $("allowFollowBtn").textContent = d.allowFollow === false ? "Turn on" : "Turn off";
+            $("allowFollowBtn").checked = d.allowFollow !== false;
           }).catch(function(){});
       }
       /* v12: Asli coins/beans server se lein (naye user ko 1000 welcome coins,
@@ -1247,16 +1291,28 @@
           socket.emit("identify", myName()); // v8: server ko apna naam batayein (block filtering ke liye)
           if (currentRoomId) socket.emit("join room", currentRoomId);
         });
+        /* v17: Do not disturb from strangers — jo friend nahi, uska chat mujhe na dikhayein. */
+        function isStrangerChat(m){
+          if (!lastProfile || !lastProfile.dndStrangers) return false;
+          if (!m || !m.name || m.name === myName()) return false;
+          var hostName = (room && room.data && room.data.host) ? room.data.host : null;
+          if (hostName && m.name.toLowerCase() === hostName.toLowerCase()) return false; // host hamesha dikhe
+          var fl = (lastProfile.followersList || []).map(function(n){ return n.toLowerCase(); });
+          var isFriend = (lastProfile.followingList || []).some(function(n){ return fl.indexOf(n.toLowerCase()) !== -1 && n.toLowerCase() === m.name.toLowerCase(); });
+          return !isFriend;
+        }
         socket.on("chat history", function(list){
           if (!room || !currentRoomId) return;
           if (historyForRoom === currentRoomId) return; // reconnect par dobara na dikhayein
           historyForRoom = currentRoomId;
           list.forEach(function(m){
+            if (isStrangerChat(m)) return;
             addChat(realChatHTML(m), m.name === myName() ? "mine" : "");
           });
         });
         socket.on("chat message", function(m){
           if (!room || m.room !== currentRoomId) return;
+          if (isStrangerChat(m)) return;
           addChat(realChatHTML(m), m.name === myName() ? "mine" : "");
         });
         /* v12: Kisi ne gift bheja — room ke sab log dekhein (burst + chat line).
@@ -1791,7 +1847,7 @@
         list.innerHTML = "<p class='bal-line'>Loading…</p>";
         $("followSheet").classList.add("open");
         if (window.location.protocol === "file:") { list.innerHTML = "<p class='bal-line'>Open the live app link to see this list.</p>"; return; }
-        fetch("/api/profile?name=" + encodeURIComponent(myName()))
+        fetch("/api/profile?name=" + encodeURIComponent(myName()) + "&viewer=" + encodeURIComponent(myName()))
           .then(function(r){ return r.json(); }).then(function(d){
             if (!d || !d.ok) { list.innerHTML = "<p class='bal-line'>Could not load.</p>"; return; }
             var names;
@@ -1865,14 +1921,14 @@
             }).catch(function(){ toast("Could not find your city — try again."); });
         }, function(){ toast("Location permission denied — allow location to show your city and country."); }, { timeout: 10000 });
       }
-      function locationToggle(btn){
+      function locationToggle(wantOn){
         if (!currentUser) { toast("Log in first."); return; }
         if (window.location.protocol === "file:") { toast("Open the live app link to use location."); return; }
-        if (btn.textContent === "Turn on") turnLocationOn();
+        if (wantOn) turnLocationOn();
         else saveLocation(false, "", "");
       }
-      $("locationBtn").addEventListener("click", function(){ locationToggle(this); });
-      $("settingsLocationBtn").addEventListener("click", function(){ locationToggle(this); });
+      $("locationBtn").addEventListener("change", function(){ locationToggle(this.checked); });
+      $("settingsLocationBtn").addEventListener("change", function(){ locationToggle(this.checked); });
 
       /* v14: Privacy toggles save karein. */
       function savePrivacy(patch){
@@ -1881,14 +1937,17 @@
         var body = { name: myName() };
         if (typeof patch.privateAccount === "boolean") body.privateAccount = patch.privateAccount;
         if (typeof patch.allowFollow === "boolean") body.allowFollow = patch.allowFollow;
+        if (typeof patch.hideOnline === "boolean") body.hideOnline = patch.hideOnline;
+        if (typeof patch.hideActive === "boolean") body.hideActive = patch.hideActive;
+        if (typeof patch.dndStrangers === "boolean") body.dndStrangers = patch.dndStrangers;
         fetch("/api/privacy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
           .then(function(r){ return r.json(); }).then(function(d){
             if (d && d.ok) { refreshProfile(); toast("Settings saved."); }
-            else toast(d && d.error ? d.error : "Could not be saved.");
-          }).catch(function(){ toast("Could not be saved — check your connection."); });
+            else { toast(d && d.error ? d.error : "Could not be saved."); refreshProfile(); }
+          }).catch(function(){ toast("Could not be saved — check your connection."); refreshProfile(); });
       }
-      $("privateBtn").addEventListener("click", function(){ savePrivacy({ privateAccount: this.textContent === "Turn on" }); });
-      $("allowFollowBtn").addEventListener("click", function(){ savePrivacy({ allowFollow: this.textContent === "Turn on" }); });
+      $("privateBtn").addEventListener("change", function(){ savePrivacy({ privateAccount: this.checked }); });
+      $("allowFollowBtn").addEventListener("change", function(){ savePrivacy({ allowFollow: this.checked }); });
 
       /* ================= Wallet ================= */
       /* v12: Rozana 500 free coins — ek din mein ek dafa (server check karta hai).
@@ -1921,6 +1980,17 @@
       function clearUser(){
         try { localStorage.removeItem("youni_user"); } catch (e) {}
       }
+      /* v17: Heartbeat — app khuli rehte har 60 second mein server ko batayein ke online hain. */
+      var heartbeatTimer = null;
+      function sendHeartbeat(){
+        if (!currentUser || window.location.protocol === "file:") return;
+        fetch("/api/heartbeat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName() }) }).catch(function(){});
+      }
+      function startHeartbeat(){
+        sendHeartbeat();
+        if (heartbeatTimer) clearInterval(heartbeatTimer);
+        heartbeatTimer = setInterval(sendHeartbeat, 60000);
+      }
       function applyUser(){
         if (!currentUser) return;
         var name = currentUser.name;
@@ -1949,6 +2019,7 @@
           if (data && data.ok) {
             currentUser = { name: data.name };
             saveUser(data.name);
+            startHeartbeat(); // v17: online status
             if (socket) socket.emit("identify", data.name); // v8: server ko naam batayein
             applyUser();
             unlockApp();
@@ -1968,16 +2039,6 @@
       $("signupBtn").addEventListener("click", function(){ doAuth("register"); });
       $("loginBtn").addEventListener("click", function(){ doAuth("login"); });
       $("authPass").addEventListener("keydown", function(e){ if (e.key === "Enter") doAuth("login"); });
-      $("logoutBtn").addEventListener("click", function(){
-        currentUser = null;
-        clearUser();
-        $("authPass").value = "";
-        showAuthError("");
-        lockApp();
-        showScreen("auth");
-        toast("Logged out.");
-      });
-
       /* ================= v8: Report / Block (UI) ================= */
       var REPORT_REASONS = ["spam", "abuse", "bad content", "fake", "other"];
       var userMenuTarget = null;
@@ -2014,7 +2075,12 @@
           .then(function(r){ return r.json(); }).then(function(d){
             if (!d || !d.ok || userMenuTarget !== name) return;
             var loc = (d.locationOn && (d.city || d.country)) ? ((d.city ? d.city + ", " : "") + d.country) : "Location hidden";
-            $("userMenuInfo").textContent = "ID: " + d.id + " · " + loc + " · " + fmtFull(d.followers) + " followers";
+            var status = "";
+            if (d.online === true) status = " · Online";
+            else if (d.lastActiveMin !== null && d.lastActiveMin !== undefined) {
+              status = d.lastActiveMin <= 0 ? " · Active just now" : d.lastActiveMin < 60 ? " · Last seen " + d.lastActiveMin + " min ago" : " · Last seen " + Math.round(d.lastActiveMin / 60) + " h ago";
+            }
+            $("userMenuInfo").textContent = "ID: " + d.id + " · " + loc + " · " + fmtFull(d.followers) + " followers" + status;
             userMenuFollowing = !!d.isFollowing;
             fb.textContent = userMenuFollowing ? "Following" : "Follow";
             fb.style.display = "";
@@ -2148,18 +2214,39 @@
           });
         }).catch(function(){ list.innerHTML = "<p class='hist-empty'>Couldn't load reports.</p>"; });
       }
-      $("blockedBtn").addEventListener("click", openBlocked);
-      $("reportsBtn").addEventListener("click", openReports);
-      $("blockedBackBtn").addEventListener("click", function(){ showScreen("profile"); });
-      $("reportsBackBtn").addEventListener("click", function(){ showScreen("profile"); });
+      $("blockedBackBtn").addEventListener("click", function(){ showScreen("settings"); });
+      $("reportsBackBtn").addEventListener("click", function(){ showScreen("settings"); });
 
       /* v14: Settings screen. */
-      $("settingsBtn").addEventListener("click", function(){ refreshProfile(); showScreen("settings"); });
       $("settingsBackBtn").addEventListener("click", function(){ showScreen("profile"); });
       $("settingsBlockedBtn").addEventListener("click", openBlocked);
       $("settingsReportsBtn").addEventListener("click", openReports);
       $("privacyPolicyBtn").addEventListener("click", function(){ showScreen("privacy"); });
       $("privacyBackBtn").addEventListener("click", function(){ showScreen("settings"); });
+
+      /* v17: Bigo jaisi Privacy screen — sliding switches, server par save hoti hain. */
+      function openPrivacyToggles(){
+        if (!currentUser) { toast("Log in first."); return; }
+        if (window.location.protocol === "file:") { toast("Open the live app link to change this."); return; }
+        fetch("/api/profile?name=" + encodeURIComponent(myName()) + "&viewer=" + encodeURIComponent(myName()))
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (!d || !d.ok) return;
+            $("privHideLocation").checked = !d.locationOn;
+            $("privHideOnline").checked = !!d.hideOnline;
+            $("privHideActive").checked = !!d.hideActive;
+            $("privDnd").checked = !!d.dndStrangers;
+          }).catch(function(){});
+        showScreen("privacy-toggles");
+      }
+      $("privacyRow").addEventListener("click", openPrivacyToggles);
+      $("privacyTogglesBackBtn").addEventListener("click", function(){ showScreen("settings"); });
+      $("privHideLocation").addEventListener("change", function(){
+        if (this.checked) saveLocation(false, "", ""); /* hide = location band */
+        else locationToggle(true); /* show = geolocation se dobara on */
+      });
+      $("privHideOnline").addEventListener("change", function(){ savePrivacy({ hideOnline: this.checked }); });
+      $("privHideActive").addEventListener("change", function(){ savePrivacy({ hideActive: this.checked }); });
+      $("privDnd").addEventListener("change", function(){ savePrivacy({ dndStrangers: this.checked }); });
       $("settingsLogoutBtn").addEventListener("click", function(){
         currentUser = null;
         clearUser();
@@ -2228,6 +2315,7 @@
 
       /* ================= Init ================= */
       renderChips();
+      if (currentUser) startHeartbeat(); // v17: yaad rakha hua login — online status
       applyTheme(); // v15: Dark Mode setting
       applyVideoQualityLabel(); // v15: Video Quality setting
       renderHome();

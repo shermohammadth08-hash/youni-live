@@ -87,6 +87,10 @@ function normalizeUser(u, users) {
   if (typeof u.livesHosted !== "number") { u.livesHosted = 0; changed = true; }
   if (typeof u.privateAccount !== "boolean") { u.privateAccount = false; changed = true; }
   if (typeof u.allowFollow !== "boolean") { u.allowFollow = true; changed = true; }
+  if (typeof u.hideOnline !== "boolean") { u.hideOnline = false; changed = true; }
+  if (typeof u.hideActive !== "boolean") { u.hideActive = false; changed = true; }
+  if (typeof u.dndStrangers !== "boolean") { u.dndStrangers = false; changed = true; }
+  if (typeof u.lastSeen !== "number") { u.lastSeen = 0; changed = true; }
   return changed ? u : null;
 }
 // v14: Level — har 100 XP par ek level, Level 1 se shuru, zyada se zyada 100.
@@ -278,7 +282,7 @@ function handleRegister(data, res) {
   const users = loadUsers();
   const taken = Object.keys(users).some((k) => k.toLowerCase() === name.toLowerCase());
   if (taken) return sendJSON(res, 400, { ok: false, error: "This name is already taken — choose another name or log in." });
-  users[name] = { pass: hashPassword(password), created: new Date().toISOString(), id: makeUserId(users), coins: WELCOME_COINS, beans: 0, giftsReceived: 0, lastClaim: "", followers: [], following: [], country: "", city: "", locationOn: false, xp: 0, livesHosted: 0, privateAccount: false, allowFollow: true };
+  users[name] = { pass: hashPassword(password), created: new Date().toISOString(), id: makeUserId(users), coins: WELCOME_COINS, beans: 0, giftsReceived: 0, lastClaim: "", followers: [], following: [], country: "", city: "", locationOn: false, xp: 0, livesHosted: 0, privateAccount: false, allowFollow: true, hideOnline: false, hideActive: false, dndStrangers: false, lastSeen: Date.now() };
   if (!saveUsers(users)) {
     delete users[name];
     return sendJSON(res, 500, { ok: false, error: "Account could not be saved — please try again." });
@@ -297,6 +301,7 @@ function handleLogin(data, res) {
     return sendJSON(res, 400, { ok: false, error: "Wrong password." });
   }
   if (normalizeUser(users[key], users)) saveUsers(users); // v12: purane user ko wallet dein
+  users[key].lastSeen = Date.now(); saveUsers(users); // v17: online status ke liye
   sendJSON(res, 200, { ok: true, name: key });
 }
 
@@ -453,6 +458,11 @@ function handleGetProfile(req, res) {
     }
   }
   const xp = u.xp || 0;
+  // v17: Online status — lastSeen 3 minute ke andar ho to online. hideOnline
+  // par doosron ko kuch nahi dikhta; hideActive par sirf "last seen" waqt chhupta hai.
+  const lastSeenMin = (typeof u.lastSeen === "number" && u.lastSeen > 0) ? Math.floor((Date.now() - u.lastSeen) / 60000) : null;
+  const online = isSelf ? true : (u.hideOnline ? null : (lastSeenMin !== null && lastSeenMin < 3));
+  const lastActiveMin = isSelf ? (lastSeenMin === null ? 0 : lastSeenMin) : (u.hideOnline || u.hideActive ? null : lastSeenMin);
   sendJSON(res, 200, {
     ok: true, name: key, id: u.id,
     followers: followers.length, following: following.length,
@@ -464,7 +474,11 @@ function handleGetProfile(req, res) {
     locationOn: !!u.locationOn && !hidden, isFollowing: isFollowing,
     xp: xp, level: levelFor(xp), xpToNext: levelFor(xp) >= 100 ? 0 : 100 - (xp % 100),
     livesHosted: u.livesHosted || 0,
-    privateAccount: !!u.privateAccount, allowFollow: u.allowFollow !== false
+    privateAccount: !!u.privateAccount, allowFollow: u.allowFollow !== false,
+    online: online, lastActiveMin: lastActiveMin,
+    hideOnline: isSelf ? !!u.hideOnline : undefined,
+    hideActive: isSelf ? !!u.hideActive : undefined,
+    dndStrangers: isSelf ? !!u.dndStrangers : undefined
   });
 }
 
@@ -538,8 +552,11 @@ function handlePrivacy(data, res) {
   normalizeUser(users[key], users);
   if (typeof data.privateAccount === "boolean") users[key].privateAccount = data.privateAccount;
   if (typeof data.allowFollow === "boolean") users[key].allowFollow = data.allowFollow;
+  if (typeof data.hideOnline === "boolean") users[key].hideOnline = data.hideOnline;
+  if (typeof data.hideActive === "boolean") users[key].hideActive = data.hideActive;
+  if (typeof data.dndStrangers === "boolean") users[key].dndStrangers = data.dndStrangers;
   if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Could not be saved — please try again." });
-  sendJSON(res, 200, { ok: true, privateAccount: !!users[key].privateAccount, allowFollow: users[key].allowFollow !== false });
+  sendJSON(res, 200, { ok: true, privateAccount: !!users[key].privateAccount, allowFollow: users[key].allowFollow !== false, hideOnline: !!users[key].hideOnline, hideActive: !!users[key].hideActive, dndStrangers: !!users[key].dndStrangers });
 }
 
 // v15: Ranking — sab se zyada XP wale top 20 users.
@@ -570,10 +587,22 @@ function handleChangePassword(data, res) {
   sendJSON(res, 200, { ok: true });
 }
 
+// v17: Heartbeat — app khuli rehte har 60 second mein lastSeen update (online status).
+function handleHeartbeat(data, res) {
+  const name = cleanName(data.name);
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  const users = loadUsers();
+  const key = findUserKey(users, name);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name." });
+  users[key].lastSeen = Date.now();
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Could not be saved." });
+  sendJSON(res, 200, { ok: true });
+}
+
 function handleRequest(req, res) {
   const url = req.url.split("?")[0];
 
-  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift" || url === "/api/follow" || url === "/api/unfollow" || url === "/api/location" || url === "/api/live-ended" || url === "/api/privacy" || url === "/api/change-password")) {
+  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift" || url === "/api/follow" || url === "/api/unfollow" || url === "/api/location" || url === "/api/live-ended" || url === "/api/privacy" || url === "/api/change-password" || url === "/api/heartbeat")) {
     readBody(req).then((data) => {
       if (url === "/api/register") handleRegister(data, res);
       else if (url === "/api/login") handleLogin(data, res);
@@ -587,6 +616,7 @@ function handleRequest(req, res) {
       else if (url === "/api/live-ended") handleLiveEnded(data, res);
       else if (url === "/api/privacy") handlePrivacy(data, res);
       else if (url === "/api/change-password") handleChangePassword(data, res);
+      else if (url === "/api/heartbeat") handleHeartbeat(data, res);
       else handleReport(data, res);
     }).catch(() => sendJSON(res, 400, { ok: false, error: "Invalid data sent." }));
     return;
