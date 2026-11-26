@@ -562,11 +562,14 @@ function handlePrivacy(data, res) {
 // v15: Ranking — sab se zyada XP wale top 20 users.
 function handleGetRanking(req, res) {
   const users = loadUsers();
+  let changed = false;
   const arr = Object.keys(users).map((k) => {
     const u = users[k];
+    if (normalizeUser(u, users)) changed = true; // v18: purane account ko bhi apni ID mile
     if (typeof u.xp !== "number") u.xp = 0;
     return { name: k, id: u.id, xp: u.xp || 0, level: levelFor(u.xp), followers: Array.isArray(u.followers) ? u.followers.length : 0 };
   });
+  if (changed) saveUsers(users);
   arr.sort((a, b) => b.xp - a.xp);
   sendJSON(res, 200, { ok: true, ranking: arr.slice(0, 20) });
 }

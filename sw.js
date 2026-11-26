@@ -1,6 +1,6 @@
 // Chai Live service worker — caches the app shell so the installed app
 // loads fast. API calls (/api/*) and socket.io traffic are NEVER cached.
-const CACHE_NAME = "chai-live-v9";
+const CACHE_NAME = "chai-live-v10";
 const SHELL = [
   "/",
   "/index.html",
