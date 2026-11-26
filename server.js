@@ -7,6 +7,12 @@
 // Railway par DATA_DIR=/data set karein aur /data par ek Volume lagayein —
 // phir restart ya redeploy par bhi accounts nahi mitenge. DATA_DIR set nahi hai
 // to users.json hamesha ki tarah app folder mein save hota hai (local mode).
+// GIFTS + COINS (v12): har user ke users.json record mein coins, beans
+// (gift se kamai), giftsReceived aur lastClaim (rozana free coins ki tareekh)
+// rehte hain. Naye user ko 1000 welcome coins; roz 500 free coins claim.
+// POST /api/gift se coins kat te hain aur host ke beans barhte hain; socket
+// par "gift" event se room ke sab log gift dekhte hain (nakli gift rokne ke
+// liye ek dafa ka token — sirf asal payment ke baad broadcast hota hai).
 // REPORT / BLOCK (v8): blocks.json { blocker: [blocked, ...] } aur reports.json
 // [ { by, target, reason, text, room, time } ] bhi DATA_DIR mein save hote hain.
 // Server chat sirf un viewers ko bhejta hai jinhon ne sender ko block nahi kiya,
@@ -47,6 +53,29 @@ const KEY_FILE = path.join(__dirname, "key.pem");
 // pehli dafa use hone par banti hain — users.json jaisa hi tareeqa.
 const BLOCKS_FILE = path.join(DATA_DIR, "blocks.json");
 const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
+// v12: Gifts — client ke GIFT_DEFS se rate milne chahiye (Rose 10, Heart 50,
+// Diamond 200, Crown 500, Sports Car 1500, Rocket 3000, Palace 5000, Yacht 9999).
+const GIFTS = { rose: 10, heart: 50, gem: 200, crown: 500, car: 1500, rocket: 3000, castle: 5000, yacht: 9999 };
+const DAILY_COINS = 500;
+const WELCOME_COINS = 1000;
+// v12: gift tokens — /api/gift kamyab ho to ek token banta hai; socket "gift"
+// handler sirf token dekh kar broadcast karta hai (bina payment ke nakli gift nahi).
+const giftTokens = [];
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+// Purane users (v12 se pehle ke) ke record mein coins/beans nahi hote —
+// pehli dafa milne par welcome coins ke saath poora kar dein.
+function normalizeUser(u) {
+  if (!u || typeof u !== "object") return null;
+  let changed = false;
+  if (typeof u.coins !== "number") { u.coins = WELCOME_COINS; changed = true; }
+  if (typeof u.beans !== "number") { u.beans = 0; changed = true; }
+  if (typeof u.giftsReceived !== "number") { u.giftsReceived = 0; changed = true; }
+  if (typeof u.lastClaim !== "string") { u.lastClaim = ""; changed = true; }
+  return changed ? u : null;
+}
+function findUserKey(users, name) {
+  return Object.keys(users).find((k) => k.toLowerCase() === name.toLowerCase());
+}
 
 function loadUsers() {
   try {
@@ -231,7 +260,7 @@ function handleRegister(data, res) {
   const users = loadUsers();
   const taken = Object.keys(users).some((k) => k.toLowerCase() === name.toLowerCase());
   if (taken) return sendJSON(res, 400, { ok: false, error: "Ye naam pehle se hai — koi aur naam chunein ya Log in karein." });
-  users[name] = { pass: hashPassword(password), created: new Date().toISOString() };
+  users[name] = { pass: hashPassword(password), created: new Date().toISOString(), coins: WELCOME_COINS, beans: 0, giftsReceived: 0, lastClaim: "" };
   if (!saveUsers(users)) {
     delete users[name];
     return sendJSON(res, 500, { ok: false, error: "Account save nahi hua — dobara koshish karein." });
@@ -249,6 +278,7 @@ function handleLogin(data, res) {
   if (users[key].pass !== hashPassword(password)) {
     return sendJSON(res, 400, { ok: false, error: "Password ghalat hai." });
   }
+  if (normalizeUser(users[key])) saveUsers(users); // v12: purane user ko wallet dein
   sendJSON(res, 200, { ok: true, name: key });
 }
 
@@ -315,15 +345,78 @@ function handleGetReports(req, res) {
   sendJSON(res, 200, { ok: true, reports: reports });
 }
 
+// v12: Coins — balance, beans aur rozana claim ki haalat.
+function handleGetCoins(req, res) {
+  const q = req.url.includes("?") ? req.url.split("?")[1] : "";
+  const name = cleanName(new URLSearchParams(q).get("name") || "");
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
+  const users = loadUsers();
+  const key = findUserKey(users, name);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "Ye naam nahi mila — pehle Sign up karein." });
+  if (normalizeUser(users[key])) saveUsers(users);
+  const u = users[key];
+  sendJSON(res, 200, { ok: true, coins: u.coins, beans: u.beans, giftsReceived: u.giftsReceived, canClaim: u.lastClaim !== todayStr() });
+}
+
+// v12: Rozana 500 free coins — ek din mein sirf ek dafa.
+function handleClaimCoins(data, res) {
+  const name = cleanName(data.name);
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
+  const users = loadUsers();
+  const key = findUserKey(users, name);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "Ye naam nahi mila — pehle Sign up karein." });
+  normalizeUser(users[key]);
+  const u = users[key];
+  if (u.lastClaim === todayStr()) {
+    return sendJSON(res, 200, { ok: false, error: "Aaj ke free coins le liye — kal phir milenge.", coins: u.coins });
+  }
+  u.coins += DAILY_COINS;
+  u.lastClaim = todayStr();
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Claim save nahi hua — dobara koshish karein." });
+  sendJSON(res, 200, { ok: true, coins: u.coins, claimed: DAILY_COINS });
+}
+
+// v12: Gift bhejna — sender ke coins kat te hain, host ke beans barhte hain.
+// Demo hosts (Ayesha Khan waghera) asal user nahi hote — un ko gift nahi bhej sakte.
+function handleGift(data, res) {
+  const from = cleanName(data.from);
+  const to = cleanName(data.to);
+  const gift = typeof data.gift === "string" ? data.gift.trim() : "";
+  if (!from) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
+  if (!to) return sendJSON(res, 400, { ok: false, error: "Kis ko gift bhejna hai, naam likhein." });
+  if (from.toLowerCase() === to.toLowerCase()) return sendJSON(res, 400, { ok: false, error: "Apne aap ko gift nahi bhej sakte." });
+  if (!Object.prototype.hasOwnProperty.call(GIFTS, gift)) return sendJSON(res, 400, { ok: false, error: "Ye gift nahi mila." });
+  const cost = GIFTS[gift];
+  const users = loadUsers();
+  const fromKey = findUserKey(users, from);
+  const toKey = findUserKey(users, to);
+  if (!fromKey) return sendJSON(res, 400, { ok: false, error: "Pehle Sign up karein." });
+  if (!toKey) return sendJSON(res, 400, { ok: false, error: "Ye demo room hai — gift sirf asli live mein bhejein." });
+  normalizeUser(users[fromKey]);
+  normalizeUser(users[toKey]);
+  if (users[fromKey].coins < cost) {
+    return sendJSON(res, 400, { ok: false, error: "Coins kam hain — Profile se roz 500 free coins lein.", coins: users[fromKey].coins });
+  }
+  users[fromKey].coins -= cost;
+  users[toKey].beans += cost;
+  users[toKey].giftsReceived += 1;
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Gift save nahi hua — dobara koshish karein." });
+  giftTokens.push({ from: from, to: to, gift: gift, cost: cost, time: Date.now() });
+  if (giftTokens.length > 200) giftTokens.splice(0, giftTokens.length - 200);
+  sendJSON(res, 200, { ok: true, coins: users[fromKey].coins, gift: gift, cost: cost });
+}
+
 function handleRequest(req, res) {
   const url = req.url.split("?")[0];
 
-  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report")) {
+  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift")) {
     readBody(req).then((data) => {
       if (url === "/api/register") handleRegister(data, res);
       else if (url === "/api/login") handleLogin(data, res);
       else if (url === "/api/block") handleBlock(data, res);
       else if (url === "/api/unblock") handleUnblock(data, res);
+      else if (url === "/api/coins/claim") handleClaimCoins(data, res);
+      else if (url === "/api/gift") handleGift(data, res);
       else handleReport(data, res);
     }).catch(() => sendJSON(res, 400, { ok: false, error: "Ghalat data bheja gaya." }));
     return;
@@ -331,6 +424,7 @@ function handleRequest(req, res) {
 
   // v8: blocked list aur reports padhna (GET).
   if (req.method === "GET" && url === "/api/blocks") { handleGetBlocks(req, res); return; }
+  if (req.method === "GET" && url === "/api/coins") { handleGetCoins(req, res); return; }
   if (req.method === "GET" && url === "/api/reports") { handleGetReports(req, res); return; }
 
   if (req.method !== "GET") {
@@ -440,6 +534,16 @@ function emitChatToRoom(roomId, msg){
   }
 }
 
+// v12: Gift room ke sab viewers ko — jis ne sender ko block kiya hai use nahi.
+function emitGiftToRoom(roomId, gift){
+  for (const [, s] of io.sockets.sockets) {
+    if (!s.rooms.has(roomId)) continue;
+    const viewer = (s.data && s.data.userName) || "";
+    if (viewer && hasBlocked(viewer, gift.from)) continue;
+    s.emit("gift", gift);
+  }
+}
+
 function emitLiveStarted(info){
   for (const [, s] of io.sockets.sockets) {
     const viewer = (s.data && s.data.userName) || "";
@@ -513,6 +617,25 @@ io.on("connection", (sock) => {
     // aur message sirf un viewers ko bhejein jinhon ne sender ko block nahi kiya.
     if (!sock.data.userName) sock.data.userName = name;
     emitChatToRoom(roomId, msg);
+  });
+
+  // v12: Gift broadcast — sirf tab jab /api/gift se payment ho chuki ho
+  // (token milna zaroori hai). Bina token ke gift room mein nahi dikhega.
+  sock.on("gift", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const from = cleanName(data.from);
+    const to = cleanName(data.to);
+    const gift = typeof data.gift === "string" ? data.gift.trim() : "";
+    if (!roomId || roomId !== joinedRoom) return;
+    if (!from || !to || !Object.prototype.hasOwnProperty.call(GIFTS, gift)) return;
+    const me = (sock.data && sock.data.userName) || "";
+    if (!me || me.toLowerCase() !== from.toLowerCase()) return;
+    const now = Date.now();
+    const ti = giftTokens.findIndex((t) => t.from.toLowerCase() === from.toLowerCase() && t.to.toLowerCase() === to.toLowerCase() && t.gift === gift && now - t.time < 60000);
+    if (ti === -1) return;
+    const tok = giftTokens.splice(ti, 1)[0];
+    emitGiftToRoom(roomId, { room: roomId, from: from, to: to, gift: gift, cost: tok.cost, time: now });
   });
 
   // ---- WebRTC signalling: sirf usi room ke andar, host <-> watcher ----

@@ -646,9 +646,9 @@
                   <h3>My Wallet</h3>
                   <p class="bal"><span id="walletCoins">1,250</span> coins</p>
                 </div>
-                <button class="btn-gold" id="rechargeBtn" type="button">+ 1,000 Coins</button>
+                <button class="btn-gold" id="rechargeBtn" type="button">+ 500 Free Coins</button>
               </div>
-              <p class="note">Send gifts in live rooms with coins. Recharge is completely free in the demo — in the real app, you buy coins.</p>
+              <p class="note">Roz 500 free coins claim karein aur live rooms mein gifts bhejein. Asli coins khareedna baad mein aayega.</p>
             </div>
             <div class="history">
               <h3>My Past Lives</h3>
@@ -760,7 +760,7 @@
         <!-- gift tray -->
         <div class="gift-tray" id="giftTray">
           <h3>Send a Gift</h3>
-          <p class="bal-line">You have <b id="trayCoins">0</b> coins · Recharge for free from Profile</p>
+          <p class="bal-line">You have <b id="trayCoins">0</b> coins · Roz 500 free coins Profile se lein</p>
           <div class="gift-grid" id="giftGrid"></div>
         </div>
 
@@ -856,6 +856,7 @@
 
       /* ================= State ================= */
       var coins = 1250, beans = 4980, myFollowers = 8432;
+      var serverOnline = false; // v12: server se coins mile to true (file mode mein demo rehta hai)
       var currentCat = "All";
       var room = null;         // active room session
       var timers = [];
@@ -880,6 +881,19 @@
         $("coinCount").textContent = fmtFull(coins);
         $("walletCoins").textContent = fmtFull(coins);
         $("trayCoins").textContent = fmtFull(coins);
+      }
+      function setBeans(n){
+        beans = n;
+        $("statBeans").textContent = fmtFull(beans);
+      }
+      /* v12: Asli coins/beans server se lein (naye user ko 1000 welcome coins,
+         purane user ko bhi pehli dafa milte hain). File mode mein demo rehta hai. */
+      function refreshWallet(){
+        if (!currentUser || window.location.protocol === "file:") return;
+        fetch("/api/coins?name=" + encodeURIComponent(myName()))
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (d && d.ok) { serverOnline = true; setCoins(d.coins); setBeans(d.beans || 0); }
+          }).catch(function(){});
       }
       function clock(sec){
         var m = Math.floor(sec/60), s = sec%60;
@@ -985,6 +999,7 @@
         addChat(n + " joined the room", "join-msg");
       }
       function simGift(hostMode){
+        if (currentRoomId && currentRoomId.indexOf("live-") === 0) return; // v12: asli live mein nakli gift nahi
         var g = pick(GIFT_DEFS.slice(0, 5));
         var n = pick(NAMES);
         addChat('<span class="who" style="color:' + nameColor(n) + '">' + n + '</span> sent ' + g.name, "gift-msg");
@@ -1023,6 +1038,21 @@
         socket.on("chat message", function(m){
           if (!room || m.room !== currentRoomId) return;
           addChat(realChatHTML(m), m.name === myName() ? "mine" : "");
+        });
+        /* v12: Kisi ne gift bheja — room ke sab log dekhein (burst + chat line).
+           Host ka gift counter bhi yahin barhta hai (live report ke liye). */
+        socket.on("gift", function(d){
+          if (!room || !d || d.room !== currentRoomId) return;
+          var g = null;
+          GIFT_DEFS.forEach(function(x){ if (x.key === d.gift) g = x; });
+          if (!g) return;
+          var burst = $("giftBurst");
+          $("giftBurstInner").innerHTML = g.svg + "<p>" + esc(d.from) + " sent " + g.name + " to " + esc(d.to) + "!</p>";
+          burst.classList.add("show");
+          setTimeout(function(){ burst.classList.remove("show"); }, 950);
+          addChat('<span class="who who-click" data-name="' + esc(d.from) + '" style="color:' + nameColor(d.from) + '">' + esc(d.from) + '</span> sent ' + g.name + ' to ' + esc(d.to), "gift-msg");
+          if (d.to === myName() && room) { room.gifts++; room.giftValue += d.cost; }
+          flyHeart();
         });
         return socket;
       }
@@ -1333,22 +1363,54 @@
           grid.appendChild(b);
         });
       }
+      /* v12: Gift bhejna — server se payment, phir room ke sab log dekhte hain.
+         Demo room ya file mode mein purana demo tareeqa chalta hai. */
       function sendGift(g){
+        if (!room) return;
+        if (!serverOnline) {
+          if (coins < g.cost) {
+            toast("Not enough coins — recharge for free from Profile");
+            $("giftTray").classList.remove("open");
+            showScreen("profile");
+            closeRoom();
+            return;
+          }
+          setCoins(coins - g.cost);
+          var burst0 = $("giftBurst");
+          $("giftBurstInner").innerHTML = g.svg + "<p>" + g.name + " sent!</p>";
+          burst0.classList.add("show");
+          setTimeout(function(){ burst0.classList.remove("show"); }, 950);
+          addChat('<span class="who" style="color:#ffd166">You</span> sent ' + g.name, "gift-msg");
+          flyHeart(); flyHeart(); flyHeart();
+          $("giftTray").classList.remove("open");
+          return;
+        }
+        if (!currentUser) { toast("Gift bhejne ke liye pehle log in karein."); $("giftTray").classList.remove("open"); return; }
+        var isLiveRoom = currentRoomId && currentRoomId.indexOf("live-") === 0;
+        if (!isLiveRoom) { toast("Ye demo room hai — gift sirf asli live mein bhejein."); $("giftTray").classList.remove("open"); return; }
+        var host = room.data.host;
+        if (host === myName()) { toast("Apne aap ko gift nahi bhej sakte."); $("giftTray").classList.remove("open"); return; }
         if (coins < g.cost) {
-          toast("Not enough coins — recharge for free from Profile");
+          toast("Coins kam hain — Profile se roz 500 free coins lein");
           $("giftTray").classList.remove("open");
           showScreen("profile");
           closeRoom();
           return;
         }
-        setCoins(coins - g.cost);
-        var burst = $("giftBurst");
-        $("giftBurstInner").innerHTML = g.svg + "<p>" + g.name + " sent!</p>";
-        burst.classList.add("show");
-        setTimeout(function(){ burst.classList.remove("show"); }, 950);
-        addChat('<span class="who" style="color:#ffd166">You</span> sent ' + g.name, "gift-msg");
-        flyHeart(); flyHeart(); flyHeart();
-        $("giftTray").classList.remove("open");
+        fetch("/api/gift", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from: myName(), to: host, gift: g.key }) })
+        .then(function(r){ return r.json(); }).then(function(d){
+          if (d && d.ok) {
+            setCoins(d.coins);
+            var s = connectSocket();
+            if (s) s.emit("gift", { room: currentRoomId, from: myName(), to: host, gift: g.key });
+            toast("Gift sent!");
+          } else {
+            toast(d && d.error ? d.error : "Gift nahi bheja gaya.");
+            if (d && d.coins != null) setCoins(d.coins);
+          }
+          $("giftTray").classList.remove("open");
+        }).catch(function(){ toast("Gift nahi bheja gaya — connection check karein."); $("giftTray").classList.remove("open"); });
       }
       $("giftBtn").addEventListener("click", function(){
         setCoins(coins);
@@ -1434,7 +1496,8 @@
         var gifts = room.gifts, giftValue = room.giftValue, newF = room.newFollowers || 0;
         var title = room.data.title;
         closeRoom();
-        beans += giftValue; myFollowers += newF;
+        refreshWallet(); // v12: beans server se taaza lein (gift ki kamai wahin save hoti hai)
+        myFollowers += newF;
         $("statBeans").textContent = fmtFull(beans);
         $("statFollowers").textContent = fmtFull(myFollowers);
         $("sumDuration").textContent = clock(dur);
@@ -1464,7 +1527,18 @@
       }
 
       /* ================= Wallet ================= */
+      /* v12: Rozana 500 free coins — ek din mein ek dafa (server check karta hai).
+         File mode mein purana demo recharge chalta hai. */
       $("rechargeBtn").addEventListener("click", function(){
+        if (serverOnline && currentUser) {
+          fetch("/api/coins/claim", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: myName() }) })
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (d && d.ok) { setCoins(d.coins); toast("500 free coins mil gaye! Kal phir aayenge."); }
+            else { toast(d && d.error ? d.error : "Claim nahi hua."); if (d && d.coins != null) setCoins(d.coins); }
+          }).catch(function(){ toast("Claim nahi hua — connection check karein."); });
+          return;
+        }
         setCoins(coins + 1000);
         toast("You got 1,000 demo coins!");
       });
@@ -1513,6 +1587,7 @@
             if (socket) socket.emit("identify", data.name); // v8: server ko naam batayein
             applyUser();
             unlockApp();
+            refreshWallet(); // v12: asli coins/beans server se lein
             $("authPass").value = "";
             showScreen("home");
             toast(mode === "register" ? "Account created — welcome, " + data.name + "!" : "Welcome, " + data.name + "!");
@@ -1691,7 +1766,7 @@
       renderReportReasons(); // v8
       setCoins(coins);
       currentUser = loadUser();
-      if (currentUser) { applyUser(); unlockApp(); showScreen("home"); }
+      if (currentUser) { applyUser(); unlockApp(); refreshWallet(); showScreen("home"); } // v12: asli coins/beans
       else { lockApp(); showScreen("auth"); }
     </script>
     <script>
