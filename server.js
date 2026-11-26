@@ -62,15 +62,27 @@ const WELCOME_COINS = 1000;
 // handler sirf token dekh kar broadcast karta hai (bina payment ke nakli gift nahi).
 const giftTokens = [];
 function todayStr() { return new Date().toISOString().slice(0, 10); }
-// Purane users (v12 se pehle ke) ke record mein coins/beans nahi hote —
-// pehli dafa milne par welcome coins ke saath poora kar dein.
-function normalizeUser(u) {
+// v13: Har account ko Bigo jaisa number ID milta hai (9 digit) — naam nahi.
+// Purane users ko pehli dafa milne par ID aur follow/location fields de dein.
+function makeUserId(users) {
+  const used = new Set(Object.values(users || {}).map((u) => u && u.id).filter((x) => typeof x === "number"));
+  let id = 0;
+  do { id = 100000000 + Math.floor(Math.random() * 900000000); } while (used.has(id));
+  return id;
+}
+function normalizeUser(u, users) {
   if (!u || typeof u !== "object") return null;
   let changed = false;
   if (typeof u.coins !== "number") { u.coins = WELCOME_COINS; changed = true; }
   if (typeof u.beans !== "number") { u.beans = 0; changed = true; }
   if (typeof u.giftsReceived !== "number") { u.giftsReceived = 0; changed = true; }
   if (typeof u.lastClaim !== "string") { u.lastClaim = ""; changed = true; }
+  if (typeof u.id !== "number") { u.id = makeUserId(users); changed = true; }
+  if (!Array.isArray(u.followers)) { u.followers = []; changed = true; }
+  if (!Array.isArray(u.following)) { u.following = []; changed = true; }
+  if (typeof u.country !== "string") { u.country = ""; changed = true; }
+  if (typeof u.city !== "string") { u.city = ""; changed = true; }
+  if (typeof u.locationOn !== "boolean") { u.locationOn = false; changed = true; }
   return changed ? u : null;
 }
 function findUserKey(users, name) {
@@ -254,31 +266,31 @@ function readBody(req) {
 function handleRegister(data, res) {
   const name = typeof data.name === "string" ? data.name.trim() : "";
   const password = typeof data.password === "string" ? data.password : "";
-  if (!name) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
-  if (name.length > 30) return sendJSON(res, 400, { ok: false, error: "Naam 30 harf se zyada nahi." });
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  if (name.length > 30) return sendJSON(res, 400, { ok: false, error: "Name must be 30 characters or less." });
   if (password.length < 4) return sendJSON(res, 400, { ok: false, error: "Password kam se kam 4 harf ka ho." });
   const users = loadUsers();
   const taken = Object.keys(users).some((k) => k.toLowerCase() === name.toLowerCase());
-  if (taken) return sendJSON(res, 400, { ok: false, error: "Ye naam pehle se hai — koi aur naam chunein ya Log in karein." });
-  users[name] = { pass: hashPassword(password), created: new Date().toISOString(), coins: WELCOME_COINS, beans: 0, giftsReceived: 0, lastClaim: "" };
+  if (taken) return sendJSON(res, 400, { ok: false, error: "This name is already taken — choose another name or log in." });
+  users[name] = { pass: hashPassword(password), created: new Date().toISOString(), id: makeUserId(users), coins: WELCOME_COINS, beans: 0, giftsReceived: 0, lastClaim: "", followers: [], following: [], country: "", city: "", locationOn: false };
   if (!saveUsers(users)) {
     delete users[name];
-    return sendJSON(res, 500, { ok: false, error: "Account save nahi hua — dobara koshish karein." });
+    return sendJSON(res, 500, { ok: false, error: "Account could not be saved — please try again." });
   }
-  sendJSON(res, 200, { ok: true, name: name });
+  sendJSON(res, 200, { ok: true, name: name, id: users[name].id });
 }
 
 function handleLogin(data, res) {
   const name = typeof data.name === "string" ? data.name.trim() : "";
   const password = typeof data.password === "string" ? data.password : "";
-  if (!name || !password) return sendJSON(res, 400, { ok: false, error: "Naam aur password likhein." });
+  if (!name || !password) return sendJSON(res, 400, { ok: false, error: "Please enter your name and password." });
   const users = loadUsers();
   const key = Object.keys(users).find((k) => k.toLowerCase() === name.toLowerCase());
-  if (!key) return sendJSON(res, 400, { ok: false, error: "Ye naam nahi mila — pehle Sign up karein." });
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name — please sign up first." });
   if (users[key].pass !== hashPassword(password)) {
-    return sendJSON(res, 400, { ok: false, error: "Password ghalat hai." });
+    return sendJSON(res, 400, { ok: false, error: "Wrong password." });
   }
-  if (normalizeUser(users[key])) saveUsers(users); // v12: purane user ko wallet dein
+  if (normalizeUser(users[key], users)) saveUsers(users); // v12: purane user ko wallet dein
   sendJSON(res, 200, { ok: true, name: key });
 }
 
@@ -286,11 +298,11 @@ function handleLogin(data, res) {
 const REPORT_REASONS = ["spam", "abuse", "bad content", "fake", "other"];
 
 function blockTargetError(name, target) {
-  if (!name) return "Naam likhein.";
-  if (name.length > 30) return "Naam 30 harf se zyada nahi.";
-  if (!target) return "Kis ko block karna hai, naam likhein.";
-  if (target.length > 30) return "Naam 30 harf se zyada nahi.";
-  if (name.toLowerCase() === target.toLowerCase()) return "Khud ko block nahi kar sakte.";
+  if (!name) return "Please enter a name.";
+  if (name.length > 30) return "Name must be 30 characters or less.";
+  if (!target) return "Please enter the name to block.";
+  if (target.length > 30) return "Name must be 30 characters or less.";
+  if (name.toLowerCase() === target.toLowerCase()) return "You cannot block yourself.";
   return null;
 }
 
@@ -299,7 +311,7 @@ function handleBlock(data, res) {
   const target = cleanName(data.target);
   const err = blockTargetError(name, target);
   if (err) return sendJSON(res, 400, { ok: false, error: err });
-  if (!addBlock(name, target)) return sendJSON(res, 500, { ok: false, error: "Block save nahi hua — dobara koshish karein." });
+  if (!addBlock(name, target)) return sendJSON(res, 500, { ok: false, error: "Block could not be saved — please try again." });
   sendJSON(res, 200, { ok: true, blocked: blocksListOf(name) });
 }
 
@@ -308,14 +320,14 @@ function handleUnblock(data, res) {
   const target = cleanName(data.target);
   const err = blockTargetError(name, target);
   if (err) return sendJSON(res, 400, { ok: false, error: err });
-  if (!removeBlock(name, target)) return sendJSON(res, 500, { ok: false, error: "Unblock save nahi hua — dobara koshish karein." });
+  if (!removeBlock(name, target)) return sendJSON(res, 500, { ok: false, error: "Unblock could not be saved — please try again." });
   sendJSON(res, 200, { ok: true, blocked: blocksListOf(name) });
 }
 
 function handleGetBlocks(req, res) {
   const q = req.url.includes("?") ? req.url.split("?")[1] : "";
   const name = cleanName(new URLSearchParams(q).get("name") || "");
-  if (!name) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
   sendJSON(res, 200, { ok: true, blocked: blocksListOf(name) });
 }
 
@@ -325,17 +337,17 @@ function handleReport(data, res) {
   const reason = typeof data.reason === "string" ? data.reason.trim() : "";
   const text = typeof data.text === "string" ? data.text.trim() : "";
   const room = typeof data.room === "string" ? data.room.trim().slice(0, 60) : "";
-  if (!name) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
-  if (name.length > 30) return sendJSON(res, 400, { ok: false, error: "Naam 30 harf se zyada nahi." });
-  if (!target) return sendJSON(res, 400, { ok: false, error: "Kis ko report karna hai, naam likhein." });
-  if (target.length > 30) return sendJSON(res, 400, { ok: false, error: "Naam 30 harf se zyada nahi." });
-  if (name.toLowerCase() === target.toLowerCase()) return sendJSON(res, 400, { ok: false, error: "Khud ko report nahi kar sakte." });
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  if (name.length > 30) return sendJSON(res, 400, { ok: false, error: "Name must be 30 characters or less." });
+  if (!target) return sendJSON(res, 400, { ok: false, error: "Please enter who to report." });
+  if (target.length > 30) return sendJSON(res, 400, { ok: false, error: "Name must be 30 characters or less." });
+  if (name.toLowerCase() === target.toLowerCase()) return sendJSON(res, 400, { ok: false, error: "You cannot report yourself." });
   if (!REPORT_REASONS.includes(reason)) return sendJSON(res, 400, { ok: false, error: "Report ki wajah chunein." });
-  if (text.length > 200) return sendJSON(res, 400, { ok: false, error: "Report 200 harf se zyada nahi." });
+  if (text.length > 200) return sendJSON(res, 400, { ok: false, error: "Report must be 200 characters or less." });
   const reports = loadReports();
   reports.push({ by: name, target: target, reason: reason, text: text, room: room, time: new Date().toISOString() });
   if (reports.length > 500) reports.splice(0, reports.length - 500);
-  if (!saveReports(reports)) return sendJSON(res, 500, { ok: false, error: "Report save nahi hua — dobara koshish karein." });
+  if (!saveReports(reports)) return sendJSON(res, 500, { ok: false, error: "Report could not be saved — please try again." });
   sendJSON(res, 200, { ok: true });
 }
 
@@ -349,11 +361,11 @@ function handleGetReports(req, res) {
 function handleGetCoins(req, res) {
   const q = req.url.includes("?") ? req.url.split("?")[1] : "";
   const name = cleanName(new URLSearchParams(q).get("name") || "");
-  if (!name) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
   const users = loadUsers();
   const key = findUserKey(users, name);
-  if (!key) return sendJSON(res, 400, { ok: false, error: "Ye naam nahi mila — pehle Sign up karein." });
-  if (normalizeUser(users[key])) saveUsers(users);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name — please sign up first." });
+  if (normalizeUser(users[key], users)) saveUsers(users);
   const u = users[key];
   sendJSON(res, 200, { ok: true, coins: u.coins, beans: u.beans, giftsReceived: u.giftsReceived, canClaim: u.lastClaim !== todayStr() });
 }
@@ -361,18 +373,18 @@ function handleGetCoins(req, res) {
 // v12: Rozana 500 free coins — ek din mein sirf ek dafa.
 function handleClaimCoins(data, res) {
   const name = cleanName(data.name);
-  if (!name) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
   const users = loadUsers();
   const key = findUserKey(users, name);
-  if (!key) return sendJSON(res, 400, { ok: false, error: "Ye naam nahi mila — pehle Sign up karein." });
-  normalizeUser(users[key]);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name — please sign up first." });
+  normalizeUser(users[key], users);
   const u = users[key];
   if (u.lastClaim === todayStr()) {
-    return sendJSON(res, 200, { ok: false, error: "Aaj ke free coins le liye — kal phir milenge.", coins: u.coins });
+    return sendJSON(res, 200, { ok: false, error: "You already claimed today's free coins — come back tomorrow.", coins: u.coins });
   }
   u.coins += DAILY_COINS;
   u.lastClaim = todayStr();
-  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Claim save nahi hua — dobara koshish karein." });
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Claim could not be saved — please try again." });
   sendJSON(res, 200, { ok: true, coins: u.coins, claimed: DAILY_COINS });
 }
 
@@ -382,34 +394,110 @@ function handleGift(data, res) {
   const from = cleanName(data.from);
   const to = cleanName(data.to);
   const gift = typeof data.gift === "string" ? data.gift.trim() : "";
-  if (!from) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
-  if (!to) return sendJSON(res, 400, { ok: false, error: "Kis ko gift bhejna hai, naam likhein." });
-  if (from.toLowerCase() === to.toLowerCase()) return sendJSON(res, 400, { ok: false, error: "Apne aap ko gift nahi bhej sakte." });
-  if (!Object.prototype.hasOwnProperty.call(GIFTS, gift)) return sendJSON(res, 400, { ok: false, error: "Ye gift nahi mila." });
+  if (!from) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  if (!to) return sendJSON(res, 400, { ok: false, error: "Please enter who to send the gift to." });
+  if (from.toLowerCase() === to.toLowerCase()) return sendJSON(res, 400, { ok: false, error: "You cannot send a gift to yourself." });
+  if (!Object.prototype.hasOwnProperty.call(GIFTS, gift)) return sendJSON(res, 400, { ok: false, error: "Gift not found." });
   const cost = GIFTS[gift];
   const users = loadUsers();
   const fromKey = findUserKey(users, from);
   const toKey = findUserKey(users, to);
-  if (!fromKey) return sendJSON(res, 400, { ok: false, error: "Pehle Sign up karein." });
-  if (!toKey) return sendJSON(res, 400, { ok: false, error: "Ye demo room hai — gift sirf asli live mein bhejein." });
-  normalizeUser(users[fromKey]);
-  normalizeUser(users[toKey]);
+  if (!fromKey) return sendJSON(res, 400, { ok: false, error: "Please sign up first." });
+  if (!toKey) return sendJSON(res, 400, { ok: false, error: "This is a demo room — gifts can only be sent in a real live." });
+  normalizeUser(users[fromKey], users);
+  normalizeUser(users[toKey], users);
   if (users[fromKey].coins < cost) {
-    return sendJSON(res, 400, { ok: false, error: "Coins kam hain — Profile se roz 500 free coins lein.", coins: users[fromKey].coins });
+    return sendJSON(res, 400, { ok: false, error: "Not enough coins — get 500 free coins daily from Profile.", coins: users[fromKey].coins });
   }
   users[fromKey].coins -= cost;
   users[toKey].beans += cost;
   users[toKey].giftsReceived += 1;
-  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Gift save nahi hua — dobara koshish karein." });
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Gift could not be saved — please try again." });
   giftTokens.push({ from: from, to: to, gift: gift, cost: cost, time: Date.now() });
   if (giftTokens.length > 200) giftTokens.splice(0, giftTokens.length - 200);
   sendJSON(res, 200, { ok: true, coins: users[fromKey].coins, gift: gift, cost: cost });
 }
 
+// v13: Profile — number ID, asli followers/following, location (sirf jab on ho).
+function handleGetProfile(req, res) {
+  const q = req.url.includes("?") ? req.url.split("?")[1] : "";
+  const params = new URLSearchParams(q);
+  const name = cleanName(params.get("name") || "");
+  const viewer = cleanName(params.get("viewer") || "");
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  const users = loadUsers();
+  const key = findUserKey(users, name);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name — please sign up first." });
+  if (normalizeUser(users[key], users)) saveUsers(users);
+  const u = users[key];
+  const followers = Array.isArray(u.followers) ? u.followers : [];
+  const following = Array.isArray(u.following) ? u.following : [];
+  let isFollowing = false;
+  if (viewer) {
+    const vKey = findUserKey(users, viewer);
+    if (vKey) {
+      normalizeUser(users[vKey], users);
+      const vFollowing = Array.isArray(users[vKey].following) ? users[vKey].following : [];
+      isFollowing = vFollowing.some((n) => n.toLowerCase() === key.toLowerCase());
+    }
+  }
+  sendJSON(res, 200, {
+    ok: true, name: key, id: u.id,
+    followers: followers.length, following: following.length,
+    followersList: followers.slice(0, 200), followingList: following.slice(0, 200),
+    beans: u.beans || 0, giftsReceived: u.giftsReceived || 0,
+    country: u.locationOn ? (u.country || "") : "",
+    city: u.locationOn ? (u.city || "") : "",
+    locationOn: !!u.locationOn, isFollowing: isFollowing
+  });
+}
+
+// v13: Follow / Unfollow — dono taraf ki lists update hoti hain.
+function handleFollow(data, res, unfollow) {
+  const from = cleanName(data.from);
+  const to = cleanName(data.to);
+  if (!from) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  if (!to) return sendJSON(res, 400, { ok: false, error: "Please enter who to follow." });
+  if (from.toLowerCase() === to.toLowerCase()) return sendJSON(res, 400, { ok: false, error: "You cannot follow yourself." });
+  const users = loadUsers();
+  const fromKey = findUserKey(users, from);
+  const toKey = findUserKey(users, to);
+  if (!fromKey) return sendJSON(res, 400, { ok: false, error: "Please sign up first." });
+  if (!toKey) return sendJSON(res, 400, { ok: false, error: "User not found — only real accounts can be followed." });
+  normalizeUser(users[fromKey], users);
+  normalizeUser(users[toKey], users);
+  if (unfollow) {
+    users[fromKey].following = users[fromKey].following.filter((n) => n.toLowerCase() !== toKey.toLowerCase());
+    users[toKey].followers = users[toKey].followers.filter((n) => n.toLowerCase() !== fromKey.toLowerCase());
+  } else {
+    if (!users[fromKey].following.some((n) => n.toLowerCase() === toKey.toLowerCase())) users[fromKey].following.push(toKey);
+    if (!users[toKey].followers.some((n) => n.toLowerCase() === fromKey.toLowerCase())) users[toKey].followers.push(fromKey);
+  }
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Could not be saved — please try again." });
+  sendJSON(res, 200, { ok: true, isFollowing: !unfollow, followers: users[toKey].followers.length, following: users[fromKey].following.length });
+}
+
+// v13: Location — sirf jab user khud on kare; band ho to profile par chhupta hai.
+function handleLocation(data, res) {
+  const name = cleanName(data.name);
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  const locationOn = data.locationOn === true;
+  const country = typeof data.country === "string" ? data.country.trim().slice(0, 60) : "";
+  const city = typeof data.city === "string" ? data.city.trim().slice(0, 60) : "";
+  const users = loadUsers();
+  const key = findUserKey(users, name);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name — please sign up first." });
+  normalizeUser(users[key], users);
+  users[key].locationOn = locationOn;
+  if (locationOn) { users[key].country = country; users[key].city = city; }
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Location could not be saved — please try again." });
+  sendJSON(res, 200, { ok: true, locationOn: users[key].locationOn, country: users[key].country, city: users[key].city });
+}
+
 function handleRequest(req, res) {
   const url = req.url.split("?")[0];
 
-  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift")) {
+  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift" || url === "/api/follow" || url === "/api/unfollow" || url === "/api/location")) {
     readBody(req).then((data) => {
       if (url === "/api/register") handleRegister(data, res);
       else if (url === "/api/login") handleLogin(data, res);
@@ -417,14 +505,18 @@ function handleRequest(req, res) {
       else if (url === "/api/unblock") handleUnblock(data, res);
       else if (url === "/api/coins/claim") handleClaimCoins(data, res);
       else if (url === "/api/gift") handleGift(data, res);
+      else if (url === "/api/follow") handleFollow(data, res, false);
+      else if (url === "/api/unfollow") handleFollow(data, res, true);
+      else if (url === "/api/location") handleLocation(data, res);
       else handleReport(data, res);
-    }).catch(() => sendJSON(res, 400, { ok: false, error: "Ghalat data bheja gaya." }));
+    }).catch(() => sendJSON(res, 400, { ok: false, error: "Invalid data sent." }));
     return;
   }
 
   // v8: blocked list aur reports padhna (GET).
   if (req.method === "GET" && url === "/api/blocks") { handleGetBlocks(req, res); return; }
   if (req.method === "GET" && url === "/api/coins") { handleGetCoins(req, res); return; }
+  if (req.method === "GET" && url === "/api/profile") { handleGetProfile(req, res); return; }
   if (req.method === "GET" && url === "/api/reports") { handleGetReports(req, res); return; }
 
   if (req.method !== "GET") {

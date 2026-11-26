@@ -277,10 +277,12 @@
       }
       .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-top: .8rem; }
       .stat {
+  cursor: pointer;
         background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
         padding: .7rem .4rem; text-align: center;
       }
       .stat b { display: block; font-size: 1.05rem; }
+      .follow-row { padding: .55rem .2rem; border-bottom: 1px solid #eee; cursor: pointer; font-weight: 600; }
       .stat span { font-size: .72rem; color: var(--ink-soft); }
       .wallet {
         margin-top: .8rem; background: var(--surface); border: 1px solid var(--line);
@@ -631,24 +633,35 @@
               <span class="avatar" id="profileAvatar" style="background:#7a4fd0">Y</span>
               <div>
                 <h2 id="profileName">Younus</h2>
-                <p id="profileId">ID: younus825 · Karachi, Pakistan</p>
+                <p id="profileId">ID: ...</p>
+                <p id="profileLoc">Location off</p>
                 <span class="level">Level 12 · Host</span>
               </div>
             </div>
             <div class="stats">
-              <div class="stat"><b id="statFollowers">8,432</b><span>Followers</span></div>
-              <div class="stat"><b>312</b><span>Following</span></div>
-              <div class="stat"><b id="statBeans">4,980</b><span>Beans (earned)</span></div>
+              <div class="stat" id="statFollowersWrap"><b id="statFollowers">0</b><span>Followers</span></div>
+              <div class="stat" id="statFollowingWrap"><b id="statFollowing">0</b><span>Following</span></div>
+              <div class="stat"><b id="statBeans">0</b><span>Beans (earned)</span></div>
             </div>
             <div class="wallet">
               <div class="row">
                 <div>
                   <h3>My Wallet</h3>
-                  <p class="bal"><span id="walletCoins">1,250</span> coins</p>
+                  <p class="bal"><span id="walletCoins">0</span> coins</p>
                 </div>
                 <button class="btn-gold" id="rechargeBtn" type="button">+ 500 Free Coins</button>
               </div>
-              <p class="note">Roz 500 free coins claim karein aur live rooms mein gifts bhejein. Asli coins khareedna baad mein aayega.</p>
+              <p class="note">Claim 500 free coins every day and send gifts in live rooms. Buying real coins is coming later.</p>
+            </div>
+            <div class="wallet">
+              <div class="row">
+                <div>
+                  <h3>Location</h3>
+                  <p class="bal" id="locationText">Off</p>
+                </div>
+                <button class="btn-gold" id="locationBtn" type="button">Turn on</button>
+              </div>
+              <p class="note">Turn on location to show your real city and country on your profile, like Bigo.</p>
             </div>
             <div class="history">
               <h3>My Past Lives</h3>
@@ -760,15 +773,23 @@
         <!-- gift tray -->
         <div class="gift-tray" id="giftTray">
           <h3>Send a Gift</h3>
-          <p class="bal-line">You have <b id="trayCoins">0</b> coins · Roz 500 free coins Profile se lein</p>
+          <p class="bal-line">You have <b id="trayCoins">0</b> coins · Get 500 free coins daily from Profile</p>
           <div class="gift-grid" id="giftGrid"></div>
+        </div>
+
+        <!-- v13: followers / following list -->
+        <div class="gift-tray user-sheet" id="followSheet">
+          <h3 id="followSheetTitle">Followers</h3>
+          <div id="followSheetList"></div>
+          <button class="btn-auth-secondary" id="followSheetCloseBtn" type="button">Close</button>
         </div>
 
         <!-- v8: user menu (Block / Report) -->
         <div class="gift-tray user-sheet" id="userSheet">
           <div id="userMenuView">
             <h3 id="userMenuName">User</h3>
-            <p class="bal-line">What do you want to do with this user?</p>
+            <p class="bal-line" id="userMenuInfo">ID: —</p>
+            <button class="btn-primary" id="userFollowBtn" type="button" style="margin-bottom:.6rem">Follow</button>
             <button class="btn-primary" id="userBlockBtn" type="button" style="margin-bottom:.6rem">Block user</button>
             <button class="btn-auth-secondary" id="userReportBtn" type="button" style="margin-top:0">Report user</button>
             <button class="btn-auth-secondary" id="userMenuCancelBtn" type="button">Cancel</button>
@@ -796,7 +817,7 @@
             <div class="cell"><b id="sumDuration">0:00</b><span>Time (duration)</span></div>
             <div class="cell"><b id="sumViewers">0</b><span>Total viewers</span></div>
             <div class="cell"><b id="sumGifts">0</b><span>Gifts received</span></div>
-            <div class="cell"><b id="sumFollowers">0</b><span>New followers</span></div>
+            <div class="cell"><b id="sumFollowers">0</b><span>Followers</span></div>
           </div>
           <button class="btn-primary" id="summaryOk" type="button">OK</button>
         </div>
@@ -855,7 +876,7 @@
       ];
 
       /* ================= State ================= */
-      var coins = 1250, beans = 4980, myFollowers = 8432;
+      var coins = 0, beans = 0, myFollowersCount = 0, myFollowingCount = 0, myNumericId = null;
       var serverOnline = false; // v12: server se coins mile to true (file mode mein demo rehta hai)
       var currentCat = "All";
       var room = null;         // active room session
@@ -885,6 +906,29 @@
       function setBeans(n){
         beans = n;
         $("statBeans").textContent = fmtFull(beans);
+      }
+      function setFollowers(n){
+        myFollowersCount = n;
+        $("statFollowers").textContent = fmtFull(n);
+      }
+      function setFollowing(n){
+        myFollowingCount = n;
+        $("statFollowing").textContent = fmtFull(n);
+      }
+      /* v13: Asli profile server se — number ID, asli followers/following, location. */
+      function refreshProfile(){
+        if (!currentUser || window.location.protocol === "file:") return;
+        fetch("/api/profile?name=" + encodeURIComponent(myName()))
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (!d || !d.ok) return;
+            myNumericId = d.id;
+            setFollowers(d.followers); setFollowing(d.following); setBeans(d.beans || 0);
+            $("profileId").textContent = "ID: " + d.id;
+            var loc = (d.locationOn && (d.city || d.country)) ? ((d.city ? d.city + ", " : "") + d.country) : "Location off";
+            $("profileLoc").textContent = loc;
+            $("locationText").textContent = loc;
+            $("locationBtn").textContent = d.locationOn ? "Turn off" : "Turn on";
+          }).catch(function(){});
       }
       /* v12: Asli coins/beans server se lein (naye user ko 1000 welcome coins,
          purane user ko bhi pehli dafa milte hain). File mode mein demo rehta hai. */
@@ -1254,6 +1298,18 @@
           following: false, gifts: 0, giftValue: 0, elapsed: 0
         };
         setupRoomUI(r.title, r.host, r.color, r.followers, IMG[r.img], r.host + "'s live stream");
+        /* v13: asli live mein host ke asli followers + Follow haalat dikhayein. */
+        if (r.id && r.id.indexOf("live-") === 0 && currentUser && window.location.protocol !== "file:") {
+          fetch("/api/profile?name=" + encodeURIComponent(r.host) + "&viewer=" + encodeURIComponent(myName()))
+            .then(function(res){ return res.json(); }).then(function(d){
+              if (!d || !d.ok || !room) return;
+              $("roomHostFollowers").textContent = fmtFull(d.followers) + " followers";
+              room.following = !!d.isFollowing;
+              var fb = $("followBtn");
+              fb.textContent = room.following ? "Following" : "Follow";
+              fb.classList.toggle("following", room.following);
+            }).catch(function(){});
+        }
         joinChatRoom(r.id);
         requestWatch(r.id);
         startRoomLoops(MSGS, false);
@@ -1304,7 +1360,6 @@
             $("liveClock").textContent = clock(room.elapsed);
             $("hostStats").textContent = " · Gifts: " + room.gifts;
           }, 1000);
-          later(function(){ if (room && Math.random() < 0.6) { room.newFollowers = (room.newFollowers||0) + 1; } }, 7000);
         }
       }
       function closeRoom(){
@@ -1322,10 +1377,22 @@
       });
       $("followBtn").addEventListener("click", function(){
         if (!room) return;
-        room.following = !room.following;
-        this.textContent = room.following ? "Following" : "Follow";
-        this.classList.toggle("following", room.following);
-        toast(room.following ? "You're now following " + room.data.host : "Unfollowed");
+        if (!currentUser) { toast("Log in first to follow."); return; }
+        var host = room.data.host;
+        if (!room.data.id || room.data.id.indexOf("live-") !== 0) { toast("This is a demo room — follow real hosts in their live."); return; }
+        var wantFollow = !room.following;
+        var btn = this;
+        fetch(wantFollow ? "/api/follow" : "/api/unfollow", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), to: host }) })
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (d && d.ok) {
+              room.following = wantFollow;
+              btn.textContent = wantFollow ? "Following" : "Follow";
+              btn.classList.toggle("following", wantFollow);
+              $("roomHostFollowers").textContent = fmtFull(d.followers) + " followers";
+              toast(wantFollow ? "You're now following " + host : "Unfollowed");
+              refreshProfile();
+            } else toast(d && d.error ? d.error : "Couldn't follow.");
+          }).catch(function(){ toast("Couldn't follow — check your connection."); });
       });
       $("likeBtn").addEventListener("click", function(){
         if (!room) return;
@@ -1385,13 +1452,13 @@
           $("giftTray").classList.remove("open");
           return;
         }
-        if (!currentUser) { toast("Gift bhejne ke liye pehle log in karein."); $("giftTray").classList.remove("open"); return; }
+        if (!currentUser) { toast("Log in first to send a gift."); $("giftTray").classList.remove("open"); return; }
         var isLiveRoom = currentRoomId && currentRoomId.indexOf("live-") === 0;
-        if (!isLiveRoom) { toast("Ye demo room hai — gift sirf asli live mein bhejein."); $("giftTray").classList.remove("open"); return; }
+        if (!isLiveRoom) { toast("This is a demo room — gifts can only be sent in a real live."); $("giftTray").classList.remove("open"); return; }
         var host = room.data.host;
-        if (host === myName()) { toast("Apne aap ko gift nahi bhej sakte."); $("giftTray").classList.remove("open"); return; }
+        if (host === myName()) { toast("You cannot send a gift to yourself."); $("giftTray").classList.remove("open"); return; }
         if (coins < g.cost) {
-          toast("Coins kam hain — Profile se roz 500 free coins lein");
+          toast("Not enough coins — get 500 free coins daily from Profile");
           $("giftTray").classList.remove("open");
           showScreen("profile");
           closeRoom();
@@ -1406,11 +1473,11 @@
             if (s) s.emit("gift", { room: currentRoomId, from: myName(), to: host, gift: g.key });
             toast("Gift sent!");
           } else {
-            toast(d && d.error ? d.error : "Gift nahi bheja gaya.");
+            toast(d && d.error ? d.error : "Gift could not be sent.");
             if (d && d.coins != null) setCoins(d.coins);
           }
           $("giftTray").classList.remove("open");
-        }).catch(function(){ toast("Gift nahi bheja gaya — connection check karein."); $("giftTray").classList.remove("open"); });
+        }).catch(function(){ toast("Gift could not be sent — check your connection."); $("giftTray").classList.remove("open"); });
       }
       $("giftBtn").addEventListener("click", function(){
         setCoins(coins);
@@ -1459,9 +1526,9 @@
           room = {
             data: { title: title, host: myName(), cat: cat },
             isHost: true, viewers: 2, likes: 0, following: true,
-            gifts: 0, giftValue: 0, elapsed: 0, newFollowers: 0
+            gifts: 0, giftValue: 0, elapsed: 0
           };
-          setupRoomUI(title, myName(), "#7a4fd0", fmtFull(myFollowers), IMG[chosenCover], "Your live stream cover");
+          setupRoomUI(title, myName(), "#7a4fd0", fmtFull(myFollowersCount), IMG[chosenCover], "Your live stream cover");
           showRoomVideo(stream, true); // apni preview (muted — awaz wapas na aaye)
           joinChatRoom(liveRoomId);
           var s = connectSocket();
@@ -1493,17 +1560,15 @@
         hideRoomVideo();
         myLiveRoomId = null;
         var dur = room.elapsed, totalViewers = room.viewers + rand(8, 30);
-        var gifts = room.gifts, giftValue = room.giftValue, newF = room.newFollowers || 0;
+        var gifts = room.gifts, giftValue = room.giftValue;
         var title = room.data.title;
         closeRoom();
         refreshWallet(); // v12: beans server se taaza lein (gift ki kamai wahin save hoti hai)
-        myFollowers += newF;
-        $("statBeans").textContent = fmtFull(beans);
-        $("statFollowers").textContent = fmtFull(myFollowers);
+        refreshProfile(); // v13: asli followers dobara lein
         $("sumDuration").textContent = clock(dur);
         $("sumViewers").textContent = fmtFull(totalViewers);
         $("sumGifts").textContent = gifts + " (" + fmtFull(giftValue) + " coins)";
-        $("sumFollowers").textContent = "+" + newF;
+        $("sumFollowers").textContent = fmtFull(myFollowersCount);
         $("summaryTitle").textContent = "“" + title + "”";
         $("summary").classList.add("open");
         liveHistory.unshift({ title: title, meta: clock(dur) + " · " + totalViewers + " viewers · " + gifts + " gifts" });
@@ -1526,6 +1591,60 @@
         });
       }
 
+      /* v13: Followers / Following list — Profile ke numbers par tap. */
+      function openFollowList(kind){
+        if (!currentUser) return;
+        var isF = kind === "followers";
+        $("followSheetTitle").textContent = isF ? "Followers" : "Following";
+        var list = $("followSheetList");
+        list.innerHTML = "<p class='bal-line'>Loading…</p>";
+        $("followSheet").classList.add("open");
+        if (window.location.protocol === "file:") { list.innerHTML = "<p class='bal-line'>Open the live app link to see this list.</p>"; return; }
+        fetch("/api/profile?name=" + encodeURIComponent(myName()))
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (!d || !d.ok) { list.innerHTML = "<p class='bal-line'>Could not load.</p>"; return; }
+            var names = isF ? (d.followersList || []) : (d.followingList || []);
+            if (!names.length) { list.innerHTML = "<p class='bal-line'>No " + (isF ? "followers" : "following") + " yet.</p>"; return; }
+            list.innerHTML = "";
+            names.forEach(function(n){
+              var row = document.createElement("div");
+              row.className = "follow-row";
+              row.textContent = n;
+              row.addEventListener("click", function(){ $("followSheet").classList.remove("open"); openUserMenu(n); });
+              list.appendChild(row);
+            });
+          }).catch(function(){ list.innerHTML = "<p class='bal-line'>Could not load — check your connection.</p>"; });
+      }
+      $("statFollowersWrap").addEventListener("click", function(){ openFollowList("followers"); });
+      $("statFollowingWrap").addEventListener("click", function(){ openFollowList("following"); });
+      $("followSheetCloseBtn").addEventListener("click", function(){ $("followSheet").classList.remove("open"); });
+
+      /* v13: Location on/off — browser ki real location, city/country profile par. */
+      function saveLocation(on, country, city){
+        fetch("/api/location", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), locationOn: on, country: country, city: city }) })
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (d && d.ok) { refreshProfile(); toast(on ? "Location updated." : "Location turned off."); }
+            else toast(d && d.error ? d.error : "Location could not be saved.");
+          }).catch(function(){ toast("Location could not be saved — check your connection."); });
+      }
+      $("locationBtn").addEventListener("click", function(){
+        if (!currentUser) { toast("Log in first."); return; }
+        if (window.location.protocol === "file:") { toast("Open the live app link to use location."); return; }
+        var turningOn = $("locationBtn").textContent === "Turn on";
+        if (!turningOn) { saveLocation(false, "", ""); return; }
+        if (!navigator.geolocation) { toast("Location is not supported on this device."); return; }
+        toast("Getting your location…");
+        navigator.geolocation.getCurrentPosition(function(pos){
+          fetch("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" + pos.coords.latitude + "&longitude=" + pos.coords.longitude + "&localityLanguage=en")
+            .then(function(r){ return r.json(); }).then(function(g){
+              var city = (g && (g.city || g.locality)) || "";
+              var country = (g && g.countryName) || "";
+              if (!city && !country) { toast("Could not find your city — try again."); return; }
+              saveLocation(true, country, city);
+            }).catch(function(){ toast("Could not find your city — try again."); });
+        }, function(){ toast("Location permission denied — allow location to show your city and country."); }, { timeout: 10000 });
+      });
+
       /* ================= Wallet ================= */
       /* v12: Rozana 500 free coins — ek din mein ek dafa (server check karta hai).
          File mode mein purana demo recharge chalta hai. */
@@ -1534,9 +1653,9 @@
           fetch("/api/coins/claim", { method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: myName() }) })
           .then(function(r){ return r.json(); }).then(function(d){
-            if (d && d.ok) { setCoins(d.coins); toast("500 free coins mil gaye! Kal phir aayenge."); }
-            else { toast(d && d.error ? d.error : "Claim nahi hua."); if (d && d.coins != null) setCoins(d.coins); }
-          }).catch(function(){ toast("Claim nahi hua — connection check karein."); });
+            if (d && d.ok) { setCoins(d.coins); toast("500 free coins added! Come back tomorrow."); }
+            else { toast(d && d.error ? d.error : "Claim failed."); if (d && d.coins != null) setCoins(d.coins); }
+          }).catch(function(){ toast("Claim failed — check your connection."); });
           return;
         }
         setCoins(coins + 1000);
@@ -1562,7 +1681,8 @@
         var name = currentUser.name;
         $("profileName").textContent = name;
         $("profileAvatar").textContent = name.charAt(0).toUpperCase();
-        $("profileId").textContent = "ID: " + name.toLowerCase().replace(/[^a-z0-9]/g, "") + " · Karachi, Pakistan";
+        $("profileId").textContent = "ID: ...";
+        $("profileLoc").textContent = "Location off";
       }
       function lockApp(){ $("app").classList.add("locked"); }
       function unlockApp(){ $("app").classList.remove("locked"); }
@@ -1588,6 +1708,7 @@
             applyUser();
             unlockApp();
             refreshWallet(); // v12: asli coins/beans server se lein
+            refreshProfile(); // v13: asli profile (ID, followers, location)
             $("authPass").value = "";
             showScreen("home");
             toast(mode === "register" ? "Account created — welcome, " + data.name + "!" : "Welcome, " + data.name + "!");
@@ -1628,6 +1749,7 @@
           wrap.appendChild(lab);
         });
       }
+      var userMenuFollowing = false;
       function openUserMenu(name){
         if (!currentUser) { toast("Log in first to block or report."); return; }
         if (!name || name === myName()) { toast("This is you."); return; }
@@ -1638,6 +1760,20 @@
         $("userMenuView").style.display = "";
         $("userReportView").style.display = "none";
         $("userSheet").classList.add("open");
+        /* v13: is user ki asli ID, location aur followers dikhayein + Follow button. */
+        var fb = $("userFollowBtn");
+        fb.style.display = "none";
+        $("userMenuInfo").textContent = "ID: —";
+        if (window.location.protocol === "file:") return;
+        fetch("/api/profile?name=" + encodeURIComponent(name) + "&viewer=" + encodeURIComponent(myName()))
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (!d || !d.ok || userMenuTarget !== name) return;
+            var loc = (d.locationOn && (d.city || d.country)) ? ((d.city ? d.city + ", " : "") + d.country) : "Location hidden";
+            $("userMenuInfo").textContent = "ID: " + d.id + " · " + loc + " · " + fmtFull(d.followers) + " followers";
+            userMenuFollowing = !!d.isFollowing;
+            fb.textContent = userMenuFollowing ? "Following" : "Follow";
+            fb.style.display = "";
+          }).catch(function(){});
       }
       function closeUserSheet(){
         $("userSheet").classList.remove("open");
@@ -1656,6 +1792,20 @@
           toast(d && d.ok ? "Blocked " + t : (d && d.error ? d.error : "Couldn't block."));
           closeUserSheet();
         }).catch(function(){ toast("Couldn't block — check connection."); closeUserSheet(); });
+      });
+      $("userFollowBtn").addEventListener("click", function(){
+        if (!userMenuTarget) return;
+        var t = userMenuTarget;
+        var wantFollow = !userMenuFollowing;
+        fetch(wantFollow ? "/api/follow" : "/api/unfollow", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), to: t }) })
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (d && d.ok) {
+              userMenuFollowing = wantFollow;
+              $("userFollowBtn").textContent = wantFollow ? "Following" : "Follow";
+              toast(wantFollow ? "You're now following " + t : "Unfollowed");
+              refreshProfile();
+            } else toast(d && d.error ? d.error : "Couldn't follow.");
+          }).catch(function(){ toast("Couldn't follow — check your connection."); });
       });
       $("userReportBtn").addEventListener("click", function(){
         if (!userMenuTarget) return;
@@ -1766,7 +1916,7 @@
       renderReportReasons(); // v8
       setCoins(coins);
       currentUser = loadUser();
-      if (currentUser) { applyUser(); unlockApp(); refreshWallet(); showScreen("home"); } // v12: asli coins/beans
+      if (currentUser) { applyUser(); unlockApp(); refreshWallet(); refreshProfile(); showScreen("home"); } // v12: asli coins/beans
       else { lockApp(); showScreen("auth"); }
     </script>
     <script>
