@@ -672,6 +672,7 @@
               <li><span class="n">1</span><span>As soon as your live starts, your room will appear in everyone's Home feed.</span></li>
               <li><span class="n">2</span><span>Viewers will chat and send gifts — gifts grow your earnings (beans).</span></li>
               <li><span class="n">3</span><span>When your live ends, you'll get a full report: how many people came and how many gifts you got.</span></li>
+              <li><span class="n">4</span><span>Multi-guest live: up to 4 guests can join your live on video — viewers tap "Join as guest" and you approve them.</span></li>
             </ul>
           </div>
         </section>
@@ -1361,6 +1362,8 @@
       var roomSeats = [];      // sab ke liye: current seats [{seat, guestId, name, seq} | null]
       var viewerStreams = [];  // viewer side: remote streams arrival order (pehli = host)
       var myLiveRoomId = null;
+      var liveConfirmed = false; // v21: server ne live register kiya ya nahi
+      var liveConfirmTimer = null;
       var liveFeed = {};       // roomId -> room card data (live hosts, Home feed ke liye)
       var RTC_CONF = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }; // public internet: Google ka free STUN server — alag networks par bhi video chalegi
 
@@ -1561,6 +1564,7 @@
             color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer"
           };
           renderHome();
+          if (room && room.isHost && info.room === myLiveRoomId && !liveConfirmed) { liveConfirmed = true; if (liveConfirmTimer) { clearTimeout(liveConfirmTimer); liveConfirmTimer = null; } toast("Congrats! You're live"); }
           if (room && !room.isHost && currentRoomId === info.room) requestWatch(info.room);
         });
         s.on("live ended", function(d){
@@ -2070,7 +2074,7 @@
         if (host === "localhost" || host === "127.0.0.1" || host === "") {
           n.textContent = "Camera needs a secure connection. On this laptop it works at http://localhost:3000. On your phone, open https://<your-laptop-IP>:3443 on the same Wi-Fi — on first open, tap Advanced, then Proceed past the security warning (the certificate is self-made, so the warning is expected).";
         } else {
-          n.textContent = "To go live from this phone, open https://" + host + ":3443 in your phone browser. On first open, tap Advanced and then Proceed — the security warning is expected because the certificate is self-made.";
+          n.textContent = "You're on the live app — the camera works directly here. Tap Go Live and allow camera access when your phone asks.";
         }
       })();
       $("startLiveBtn").addEventListener("click", function(){
@@ -2102,11 +2106,23 @@
           $("roomViewerCount").textContent = "2";
           startRoomLoops(HOST_MSGS, true);
           setTimeout(function(){ if (room) { simJoin(); simJoin(); } }, 900);
-          toast("Congrats! You're live");
+          liveConfirmed = false;
+          toast("Live start ho raha hai…");
+          liveConfirmTimer = setTimeout(function(){
+            if (liveConfirmed || !myLiveRoomId) return;
+            var s2 = connectSocket();
+            if (s2) { s2.emit("join room", myLiveRoomId); s2.emit("go live", { room: myLiveRoomId, title: title, host: myName(), cat: cat, cover: chosenCover }); }
+            toast("Live start nahi hua — dobara try kar raha hoon…");
+            liveConfirmTimer = setTimeout(function(){
+              if (liveConfirmed || !myLiveRoomId) return;
+              toast("Live start nahi hua — internet check kar ke dobara Go Live dabayein.");
+            }, 6000);
+          }, 6000);
         }).catch(function(err){
           btn.disabled = false;
           if (!camAvailable()) {
-            showCamError("To go live from this phone, open https://" + window.location.hostname + ":3443 in your phone browser. On first open, tap Advanced and then Proceed — the security warning is expected because the certificate is self-made.");
+            if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") showCamError("To go live from this phone, open https://" + window.location.hostname + ":3443 in your phone browser. On first open, tap Advanced and then Proceed — the security warning is expected because the certificate is self-made.");
+            else showCamError("Camera is not available in this browser — open the app in Chrome and allow camera access, then try again.");
           } else if (err && err.name === "NotAllowedError") {
             showCamError("Camera permission denied — allow camera access and try again.");
           } else {
@@ -2124,6 +2140,8 @@
         stopCamera();
         hideRoomVideo();
         myLiveRoomId = null;
+        liveConfirmed = false;
+        if (liveConfirmTimer) { clearTimeout(liveConfirmTimer); liveConfirmTimer = null; }
         /* v14: live khatam — host ko +20 XP (server par). */
         if (wasLiveRoom && currentUser && window.location.protocol !== "file:") {
           fetch("/api/live-ended", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName() }) }).catch(function(){});
@@ -2651,6 +2669,7 @@
       currentUser = loadUser();
       if (currentUser) { applyUser(); unlockApp(); refreshWallet(); refreshProfile(); showScreen("home"); } // v12: asli coins/beans
       else { lockApp(); showScreen("auth"); }
+      if (window.location.protocol !== "file:") connectSocket(); // v21: Home par live list aaye — socket app khulte hi connect ho
     </script>
     <script>
       // PWA: service worker register karein (sirf jab browser support kare).
