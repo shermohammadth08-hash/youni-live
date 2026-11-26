@@ -542,10 +542,38 @@ function handlePrivacy(data, res) {
   sendJSON(res, 200, { ok: true, privateAccount: !!users[key].privateAccount, allowFollow: users[key].allowFollow !== false });
 }
 
+// v15: Ranking — sab se zyada XP wale top 20 users.
+function handleGetRanking(req, res) {
+  const users = loadUsers();
+  const arr = Object.keys(users).map((k) => {
+    const u = users[k];
+    if (typeof u.xp !== "number") u.xp = 0;
+    return { name: k, id: u.id, xp: u.xp || 0, level: levelFor(u.xp), followers: Array.isArray(u.followers) ? u.followers.length : 0 };
+  });
+  arr.sort((a, b) => b.xp - a.xp);
+  sendJSON(res, 200, { ok: true, ranking: arr.slice(0, 20) });
+}
+
+// v15: Password change.
+function handleChangePassword(data, res) {
+  const name = cleanName(data.name);
+  const oldPass = typeof data.oldPassword === "string" ? data.oldPassword : "";
+  const newPass = typeof data.newPassword === "string" ? data.newPassword : "";
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  if (newPass.length < 4) return sendJSON(res, 400, { ok: false, error: "Password must be at least 4 characters." });
+  const users = loadUsers();
+  const key = findUserKey(users, name);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name — please sign up first." });
+  if (users[key].pass !== hashPassword(oldPass)) return sendJSON(res, 400, { ok: false, error: "Wrong password." });
+  users[key].pass = hashPassword(newPass);
+  if (!saveUsers(users)) return sendJSON(res, 500, { ok: false, error: "Could not be saved — please try again." });
+  sendJSON(res, 200, { ok: true });
+}
+
 function handleRequest(req, res) {
   const url = req.url.split("?")[0];
 
-  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift" || url === "/api/follow" || url === "/api/unfollow" || url === "/api/location" || url === "/api/live-ended" || url === "/api/privacy")) {
+  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift" || url === "/api/follow" || url === "/api/unfollow" || url === "/api/location" || url === "/api/live-ended" || url === "/api/privacy" || url === "/api/change-password")) {
     readBody(req).then((data) => {
       if (url === "/api/register") handleRegister(data, res);
       else if (url === "/api/login") handleLogin(data, res);
@@ -558,6 +586,7 @@ function handleRequest(req, res) {
       else if (url === "/api/location") handleLocation(data, res);
       else if (url === "/api/live-ended") handleLiveEnded(data, res);
       else if (url === "/api/privacy") handlePrivacy(data, res);
+      else if (url === "/api/change-password") handleChangePassword(data, res);
       else handleReport(data, res);
     }).catch(() => sendJSON(res, 400, { ok: false, error: "Invalid data sent." }));
     return;
@@ -567,6 +596,7 @@ function handleRequest(req, res) {
   if (req.method === "GET" && url === "/api/blocks") { handleGetBlocks(req, res); return; }
   if (req.method === "GET" && url === "/api/coins") { handleGetCoins(req, res); return; }
   if (req.method === "GET" && url === "/api/profile") { handleGetProfile(req, res); return; }
+  if (req.method === "GET" && url === "/api/ranking") { handleGetRanking(req, res); return; }
   if (req.method === "GET" && url === "/api/reports") { handleGetReports(req, res); return; }
 
   if (req.method !== "GET") {

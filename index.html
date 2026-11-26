@@ -56,6 +56,37 @@
         }
       }
 
+      html[data-theme="dark"] {
+        --page-bg: #07080d;
+        --bg: #0d0f16;
+        --surface: #171a26;
+        --surface-2: #1f2333;
+        --ink: #f2f3f9;
+        --ink-soft: #a6adc4;
+        --line: #262b3f;
+        --gold-bg: #3a2f10;
+        --nav-bg: rgba(15,17,26,.94);
+        --shadow: 0 10px 30px rgba(0,0,0,.5);
+        --chip-bg: #20242f;
+      }
+      html[data-theme="light"] {
+        --page-bg: #e9ebf2;
+        --bg: #f6f7fb;
+        --surface: #ffffff;
+        --surface-2: #eef0f7;
+        --ink: #171a26;
+        --ink-soft: #565d75;
+        --line: #dde1ee;
+        --brand: #e8334d;
+        --brand-deep: #c21730;
+        --gold: #d9930d;
+        --gold-bg: #fdf3d7;
+        --teal: #0e9f8a;
+        --nav-bg: rgba(255,255,255,.94);
+        --shadow: 0 10px 30px rgba(23,26,38,.14);
+        --chip-bg: #eceef6;
+      }
+
       /* ---------- App frame ---------- */
       .app {
         position: relative;
@@ -263,7 +294,17 @@
       }
 
       /* ---------- Profile ---------- */
-      .profile-wrap { padding: .4rem .9rem 0; }
+      .profile-wrap { padding: .4rem .9rem 0; position: relative; }
+      .gear-btn { position: absolute; top: .5rem; right: .9rem; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2; }
+      .gear-btn svg { width: 20px; height: 20px; }
+      .badges { display: flex; gap: .5rem; margin-top: .7rem; flex-wrap: wrap; }
+      .badge { background: var(--gold-bg); color: var(--gold); font-size: .75rem; font-weight: 800; border-radius: 999px; padding: .3rem .7rem; }
+      .badge.host { background: var(--surface-2); color: #7a4fd0; }
+      .menu-list { margin-top: .8rem; background: var(--surface); border-radius: 16px; overflow: hidden; }
+      .menu-row { display: flex; align-items: center; gap: .6rem; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--line); padding: .85rem .9rem; font-size: .92rem; font-weight: 650; color: var(--ink); cursor: pointer; }
+      .menu-row:last-child { border-bottom: none; }
+      .menu-row .val { margin-left: auto; font-size: .78rem; color: var(--ink-soft); font-weight: 600; }
+      .menu-row .chev { color: var(--ink-soft); }
       .profile-card {
         background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
         padding: 1rem; display: flex; gap: .85rem; align-items: center;
@@ -631,6 +672,7 @@
         <!-- ===== PROFILE ===== -->
         <section class="screen" id="screen-profile">
           <div class="profile-wrap">
+            <button class="gear-btn" id="profileGearBtn" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2L19 19M19 5l-1.8 1.8M6.8 17.2L5 19"/></svg></button>
             <div class="profile-card">
               <span class="avatar" id="profileAvatar" style="background:#7a4fd0">Y</span>
               <div>
@@ -640,10 +682,14 @@
                 <span class="level" id="profileLevel">Level 1</span>
               </div>
             </div>
+            <div class="badges">
+              <span class="badge" id="levelBadge">Lv.1</span>
+              <span class="badge host" id="hostBadge" style="display:none">Host</span>
+            </div>
             <div class="stats">
-              <div class="stat" id="statFollowersWrap"><b id="statFollowers">0</b><span>Followers</span></div>
+              <div class="stat" id="statFriendsWrap"><b id="statFriends">0</b><span>Friends</span></div>
               <div class="stat" id="statFollowingWrap"><b id="statFollowing">0</b><span>Following</span></div>
-              <div class="stat"><b id="statBeans">0</b><span>Beans (earned)</span></div>
+              <div class="stat" id="statFollowersWrap"><b id="statFollowers">0</b><span>Fans</span></div>
             </div>
             <div class="level-bar"><div class="level-fill" id="levelFill" style="width:0%"></div></div>
             <p class="note" id="levelText">0 XP · 100 XP to Level 2</p>
@@ -651,7 +697,7 @@
               <div class="row">
                 <div>
                   <h3>My Wallet</h3>
-                  <p class="bal"><span id="walletCoins">0</span> coins</p>
+                  <p class="bal"><span id="walletCoins">0</span> coins · <span id="walletBeans">0</span> beans</p>
                 </div>
                 <button class="btn-gold" id="rechargeBtn" type="button">+ 500 Free Coins</button>
               </div>
@@ -666,6 +712,12 @@
                 <button class="btn-gold" id="locationBtn" type="button">Turn on</button>
               </div>
               <p class="note">Turn on location to show your real city and country on your profile, like Bigo.</p>
+            </div>
+            <div class="menu-list">
+              <button class="menu-row" id="menuGoLive" type="button">Go Live <span class="val">Start your live</span><span class="chev">›</span></button>
+              <button class="menu-row" id="menuDailyTask" type="button">Daily Task <span class="val" id="dailyTaskVal">Claim 500 coins</span><span class="chev">›</span></button>
+              <button class="menu-row" id="menuFansGroup" type="button">Fans Group <span class="val" id="fansGroupVal">0 fans</span><span class="chev">›</span></button>
+              <button class="menu-row" id="menuRanking" type="button">Ranking <span class="val">Top levels</span><span class="chev">›</span></button>
             </div>
             <div class="history">
               <h3>My Past Lives</h3>
@@ -732,9 +784,15 @@
               </div>
               <p class="note">When off, nobody new can follow you.</p>
             </div>
-            <button class="btn-auth-secondary" id="settingsBlockedBtn" type="button">Blocked users</button>
-            <button class="btn-auth-secondary" id="settingsReportsBtn" type="button">Reports</button>
-            <button class="btn-auth-secondary" id="privacyPolicyBtn" type="button">Privacy Policy</button>
+            <div class="menu-list">
+              <button class="menu-row" id="accountRow" type="button">Account management <span class="val" id="accountVal">View</span><span class="chev">›</span></button>
+              <button class="menu-row" id="videoQualityRow" type="button">Video Quality <span class="val" id="videoQualityVal">Auto (recommended)</span><span class="chev">›</span></button>
+              <button class="menu-row" id="darkModeRow" type="button">Dark Mode <span class="val" id="darkModeVal">Use device settings</span><span class="chev">›</span></button>
+              <button class="menu-row" id="notificationsRow" type="button">Notifications <span class="val">Mobile app only</span><span class="chev">›</span></button>
+              <button class="menu-row" id="settingsBlockedBtn" type="button">Blocked List <span class="chev">›</span></button>
+              <button class="menu-row" id="settingsReportsBtn" type="button">Reports <span class="chev">›</span></button>
+              <button class="menu-row" id="privacyPolicyBtn" type="button">Privacy Policy <span class="chev">›</span></button>
+            </div>
             <div class="wallet">
               <div class="row">
                 <div>
@@ -755,6 +813,40 @@
             <h2 style="font-size:1.25rem;margin:.2rem 0 .3rem">Privacy Policy</h2>
             <p class="sub" style="color:var(--ink-soft);font-size:.88rem;margin:0 0 1rem;line-height:1.6">Chai Live stores your account name, a scrambled password, your coins, beans, gifts, followers and level on the app server so your account survives restarts. Your location (city and country) is saved ONLY when you turn Location on yourself, and it is hidden again when you turn it off. A private account hides your location and your followers / following lists from other users. Blocked users can't send you chat messages or join your live. Reports are used only to keep the app safe. Your live video is never recorded or saved on the server.</p>
             <button class="btn-auth-secondary" id="privacyBackBtn" type="button">Back to Settings</button>
+          </div>
+        </section>
+
+        <!-- ===== ACCOUNT MANAGEMENT (v15) ===== -->
+        <section class="screen" id="screen-account">
+          <div class="profile-wrap">
+            <h2 style="font-size:1.25rem;margin:.2rem 0 .3rem">Account management</h2>
+            <div class="wallet">
+              <div class="row">
+                <div>
+                  <h3>Name</h3>
+                  <p class="bal" id="accountName">—</p>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <h3>ID</h3>
+                  <p class="bal" id="accountId">—</p>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <h3>Level</h3>
+                  <p class="bal" id="accountLevel">—</p>
+                </div>
+              </div>
+            </div>
+            <div class="wallet">
+              <h3>Change password</h3>
+              <div class="field"><input type="password" id="oldPass" placeholder="Current password" autocomplete="current-password"></div>
+              <div class="field" style="margin-top:.6rem"><input type="password" id="newPass" placeholder="New password (at least 4 characters)" autocomplete="new-password"></div>
+              <button class="btn-primary" id="changePassBtn" type="button" style="margin-top:.8rem">Change password</button>
+            </div>
+            <button class="btn-auth-secondary" id="accountBackBtn" type="button">Back to Settings</button>
           </div>
         </section>
       </div>
@@ -942,6 +1034,7 @@
 
       /* ================= State ================= */
       var coins = 0, beans = 0, myFollowersCount = 0, myFollowingCount = 0, myNumericId = null;
+      var lastProfile = null; // v15: Account screen ke liye taaza profile
       var serverOnline = false; // v12: server se coins mile to true (file mode mein demo rehta hai)
       var currentCat = "All";
       var room = null;         // active room session
@@ -970,7 +1063,7 @@
       }
       function setBeans(n){
         beans = n;
-        $("statBeans").textContent = fmtFull(beans);
+        $("walletBeans").textContent = fmtFull(beans);
       }
       function setFollowers(n){
         myFollowersCount = n;
@@ -986,7 +1079,15 @@
         fetch("/api/profile?name=" + encodeURIComponent(myName()))
           .then(function(r){ return r.json(); }).then(function(d){
             if (!d || !d.ok) return;
+            lastProfile = d;
             myNumericId = d.id;
+            /* v15: Friends = mutual follows; Level badge; Fans Group count. */
+            var fl = (d.followersList || []).map(function(n){ return n.toLowerCase(); });
+            var mutual = (d.followingList || []).filter(function(n){ return fl.indexOf(n.toLowerCase()) !== -1; });
+            $("statFriends").textContent = fmtFull(mutual.length);
+            $("levelBadge").textContent = "Lv." + d.level;
+            $("hostBadge").style.display = (d.livesHosted || 0) > 0 ? "" : "none";
+            $("fansGroupVal").textContent = fmtFull(d.followers) + " fans";
             setFollowers(d.followers); setFollowing(d.following); setBeans(d.beans || 0);
             $("profileId").textContent = "ID: " + d.id;
             var loc = (d.locationOn && (d.city || d.country)) ? ((d.city ? d.city + ", " : "") + d.country) : "Location off";
@@ -1011,7 +1112,7 @@
         if (!currentUser || window.location.protocol === "file:") return;
         fetch("/api/coins?name=" + encodeURIComponent(myName()))
           .then(function(r){ return r.json(); }).then(function(d){
-            if (d && d.ok) { serverOnline = true; setCoins(d.coins); setBeans(d.beans || 0); }
+            if (d && d.ok) { serverOnline = true; setCoins(d.coins); setBeans(d.beans || 0); $("dailyTaskVal").textContent = d.canClaim ? "Claim 500 coins" : "Claimed for today"; }
           }).catch(function(){});
       }
       function clock(sec){
@@ -1209,9 +1310,19 @@
         if (el) { el.textContent = msg; el.style.display = "block"; }
         toast(msg);
       }
+      /* v15: Video Quality setting — Auto / High (720p) / Medium (480p). */
+      function videoQuality(){
+        var q = "auto";
+        try { q = localStorage.getItem("chai_video_quality") || "auto"; } catch (e) {}
+        return q;
+      }
       function startCamera(){
         if (!camAvailable()) return Promise.reject(new Error("nocam"));
-        return navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+        var video = { facingMode: "user" };
+        var q = videoQuality();
+        if (q === "high") { video.width = { ideal: 1280 }; video.height = { ideal: 720 }; }
+        else if (q === "medium") { video.width = { ideal: 640 }; video.height = { ideal: 480 }; }
+        return navigator.mediaDevices.getUserMedia({ video: video, audio: true });
       }
       function stopCamera(){
         if (localStream) { localStream.getTracks().forEach(function(t){ t.stop(); }); localStream = null; }
@@ -1675,7 +1786,7 @@
       function openFollowList(kind){
         if (!currentUser) return;
         var isF = kind === "followers";
-        $("followSheetTitle").textContent = isF ? "Followers" : "Following";
+        $("followSheetTitle").textContent = kind === "friends" ? "Friends" : (isF ? "Followers" : "Following");
         var list = $("followSheetList");
         list.innerHTML = "<p class='bal-line'>Loading…</p>";
         $("followSheet").classList.add("open");
@@ -1683,8 +1794,12 @@
         fetch("/api/profile?name=" + encodeURIComponent(myName()))
           .then(function(r){ return r.json(); }).then(function(d){
             if (!d || !d.ok) { list.innerHTML = "<p class='bal-line'>Could not load.</p>"; return; }
-            var names = isF ? (d.followersList || []) : (d.followingList || []);
-            if (!names.length) { list.innerHTML = "<p class='bal-line'>No " + (isF ? "followers" : "following") + " yet.</p>"; return; }
+            var names;
+            if (kind === "friends") {
+              var fl2 = (d.followersList || []).map(function(n){ return n.toLowerCase(); });
+              names = (d.followingList || []).filter(function(n){ return fl2.indexOf(n.toLowerCase()) !== -1; });
+            } else names = isF ? (d.followersList || []) : (d.followingList || []);
+            if (!names.length) { list.innerHTML = "<p class='bal-line'>No " + (kind === "friends" ? "friends" : (isF ? "followers" : "following")) + " yet.</p>"; return; }
             list.innerHTML = "";
             names.forEach(function(n){
               var row = document.createElement("div");
@@ -1697,6 +1812,36 @@
       }
       $("statFollowersWrap").addEventListener("click", function(){ openFollowList("followers"); });
       $("statFollowingWrap").addEventListener("click", function(){ openFollowList("following"); });
+      $("statFriendsWrap").addEventListener("click", function(){ openFollowList("friends"); });
+
+      /* v15: Ranking — sab se zyada XP wale users. */
+      function openRanking(){
+        $("followSheetTitle").textContent = "Ranking";
+        var list = $("followSheetList");
+        list.innerHTML = "<p class='bal-line'>Loading…</p>";
+        $("followSheet").classList.add("open");
+        if (window.location.protocol === "file:") { list.innerHTML = "<p class='bal-line'>Open the live app link to see the ranking.</p>"; return; }
+        fetch("/api/ranking")
+          .then(function(r){ return r.json(); }).then(function(d){
+            var arr = (d && d.ranking) || [];
+            if (!arr.length) { list.innerHTML = "<p class='bal-line'>No users yet.</p>"; return; }
+            list.innerHTML = "";
+            arr.forEach(function(u, i){
+              var row = document.createElement("div");
+              row.className = "follow-row";
+              row.textContent = (i + 1) + ". " + u.name + " · Lv." + u.level + " · " + fmtFull(u.xp) + " XP";
+              row.addEventListener("click", function(){ $("followSheet").classList.remove("open"); openUserMenu(u.name); });
+              list.appendChild(row);
+            });
+          }).catch(function(){ list.innerHTML = "<p class='bal-line'>Could not load — check your connection.</p>"; });
+      }
+
+      /* v15: Bigo-style Profile menu + gear. */
+      $("profileGearBtn").addEventListener("click", function(){ refreshProfile(); showScreen("settings"); });
+      $("menuGoLive").addEventListener("click", function(){ showScreen("golive"); });
+      $("menuDailyTask").addEventListener("click", function(){ $("rechargeBtn").click(); });
+      $("menuFansGroup").addEventListener("click", function(){ openFollowList("followers"); });
+      $("menuRanking").addEventListener("click", openRanking);
       $("followSheetCloseBtn").addEventListener("click", function(){ $("followSheet").classList.remove("open"); });
 
       /* v13: Location on/off — browser ki real location, city/country profile par. */
@@ -2025,8 +2170,66 @@
         toast("Logged out.");
       });
 
+      /* v15: Dark Mode — device / Dark / Light (saved on this phone). */
+      function applyTheme(){
+        var t = "device";
+        try { t = localStorage.getItem("chai_theme") || "device"; } catch (e) {}
+        if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+        else if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+        else document.documentElement.removeAttribute("data-theme");
+        var el = $("darkModeVal");
+        if (el) el.textContent = t === "dark" ? "Dark" : t === "light" ? "Light" : "Use device settings";
+      }
+      $("darkModeRow").addEventListener("click", function(){
+        var t = "device";
+        try { t = localStorage.getItem("chai_theme") || "device"; } catch (e) {}
+        var next = t === "device" ? "dark" : t === "dark" ? "light" : "device";
+        try { localStorage.setItem("chai_theme", next); } catch (e) {}
+        applyTheme();
+      });
+      /* v15: Video Quality — Auto / High (720p) / Medium (480p). */
+      function applyVideoQualityLabel(){
+        var el = $("videoQualityVal");
+        if (!el) return;
+        var q = videoQuality();
+        el.textContent = q === "high" ? "High (720p)" : q === "medium" ? "Medium (480p)" : "Auto (recommended)";
+      }
+      $("videoQualityRow").addEventListener("click", function(){
+        var q = videoQuality();
+        var next = q === "auto" ? "high" : q === "high" ? "medium" : "auto";
+        try { localStorage.setItem("chai_video_quality", next); } catch (e) {}
+        applyVideoQualityLabel();
+        toast("Video quality: " + (next === "high" ? "High (720p)" : next === "medium" ? "Medium (480p)" : "Auto"));
+      });
+      /* v15: Notifications — sirf mobile app mein (web mein nahi ho sakti). */
+      $("notificationsRow").addEventListener("click", function(){
+        toast("Notifications come with the mobile app. This web version can't send them yet.");
+      });
+      /* v15: Account management screen + change password. */
+      $("accountRow").addEventListener("click", function(){
+        if (lastProfile) {
+          $("accountName").textContent = lastProfile.name;
+          $("accountId").textContent = "ID: " + lastProfile.id;
+          $("accountLevel").textContent = "Level " + lastProfile.level + " · " + fmtFull(lastProfile.xp || 0) + " XP";
+        }
+        showScreen("account");
+      });
+      $("accountBackBtn").addEventListener("click", function(){ showScreen("settings"); });
+      $("changePassBtn").addEventListener("click", function(){
+        if (!currentUser) { toast("Log in first."); return; }
+        var oldP = $("oldPass").value, newP = $("newPass").value;
+        if (newP.length < 4) { toast("Password must be at least 4 characters."); return; }
+        fetch("/api/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), oldPassword: oldP, newPassword: newP }) })
+          .then(function(r){ return r.json(); }).then(function(d){
+            if (d && d.ok) { $("oldPass").value = ""; $("newPass").value = ""; toast("Password changed."); }
+            else toast(d && d.error ? d.error : "Could not change password.");
+          }).catch(function(){ toast("Could not change password — check your connection."); });
+      });
+
       /* ================= Init ================= */
       renderChips();
+      applyTheme(); // v15: Dark Mode setting
+      applyVideoQualityLabel(); // v15: Video Quality setting
       renderHome();
       renderGifts();
       renderCovers();
