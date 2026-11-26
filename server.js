@@ -1,8 +1,12 @@
-// Youni Live — PUBLIC version (Render free tier) — server + real-time live chat (socket.io) + real Go Live video (WebRTC signalling) + PWA (installable app)
-// PUBLIC mode: agar PORT environment variable set hai (Render khud deta hai),
+// Youni Live — PUBLIC version (Railway free tier) — server + real-time live chat (socket.io) + real Go Live video (WebRTC signalling) + PWA (installable app)
+// PUBLIC mode: agar PORT environment variable set hai (Railway khud deta hai),
 // to server sirf usi ek HTTP port par chalta hai — platform khud HTTPS deta hai,
 // is liye certificate ki zaroorat nahi. PORT set nahi hai to local mode:
 // HTTP port 3000 + HTTPS port 3443 (self-signed cert), bilkul v6 jaisa.
+// ACCOUNTS BACHANA (v7): users.json ab DATA_DIR mein save hota hai.
+// Railway par DATA_DIR=/data set karein aur /data par ek Volume lagayein —
+// phir restart ya redeploy par bhi accounts nahi mitenge. DATA_DIR set nahi hai
+// to users.json hamesha ki tarah app folder mein save hota hai (local mode).
 // - manifest.webmanifest, sw.js aur icons serve hote hain (PWA install ke liye); sw.js par no-cache headers.
 // - index.html serve karta hai — HTTP port 3000 AND HTTPS port 3443 (self-signed cert)
 // - HTTPS is liye: phone ka camera sirf secure connection (HTTPS / localhost) par chalta hai.
@@ -24,7 +28,11 @@ const HTTPS_PORT = 3443;
 // Public hosting (jaise Render) ek PORT environment variable deta hai.
 // Us waqt sirf usi port par ek HTTP server chalta hai; platform khud HTTPS deta hai.
 const HOST_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : null;
-const USERS_FILE = path.join(__dirname, "users.json");
+// DATA_DIR: jahan users.json save hoga. Railway par Volume /data par lagayein
+// aur variable DATA_DIR=/data set karein — accounts restart par bhi bachenge.
+// Warna (local mode) users.json app folder mein hi rehta hai.
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const USERS_FILE = path.join(DATA_DIR, "users.json");
 const CERT_FILE = path.join(__dirname, "cert.pem");
 const KEY_FILE = path.join(__dirname, "key.pem");
 
@@ -37,7 +45,14 @@ function loadUsers() {
 }
 
 function saveUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    return true;
+  } catch (e) {
+    console.error("users.json save nahi hua:", e.message);
+    return false;
+  }
 }
 
 function hashPassword(password) {
@@ -118,7 +133,10 @@ function handleRegister(data, res) {
   const taken = Object.keys(users).some((k) => k.toLowerCase() === name.toLowerCase());
   if (taken) return sendJSON(res, 400, { ok: false, error: "Ye naam pehle se hai — koi aur naam chunein ya Log in karein." });
   users[name] = { pass: hashPassword(password), created: new Date().toISOString() };
-  saveUsers(users);
+  if (!saveUsers(users)) {
+    delete users[name];
+    return sendJSON(res, 500, { ok: false, error: "Account save nahi hua — dobara koshish karein." });
+  }
   sendJSON(res, 200, { ok: true, name: name });
 }
 
