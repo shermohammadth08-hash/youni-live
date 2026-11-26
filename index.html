@@ -383,6 +383,15 @@
       .room-view .bg-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
       .room-view .room-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; background: #000; }
       .room-view .room-video.show { display: block; }
+      /* v20: Multi-guest tiles — host + 4 guests */
+      .guest-tiles { position: absolute; top: 74px; left: 10px; right: 10px; display: flex; gap: 6px; z-index: 5; pointer-events: none; }
+      .guest-tile { flex: 1; max-width: 112px; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: #111; border: 2px solid rgba(255,255,255,.4); position: relative; display: none; }
+      .guest-tile.on { display: block; }
+      .guest-tile video { width: 100%; height: 100%; object-fit: cover; }
+      .guest-tile .gname { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font-size: .62rem; font-weight: 700; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .guest-tile .gkick { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: .75rem; line-height: 1; cursor: pointer; pointer-events: auto; }
+      .round-btn.guest-on { background: #e8334d; color: #fff; }
+      .guest-reqs { border-top: 1px solid rgba(255,255,255,.15); margin-top: .5rem; padding-top: .5rem; }
       .viewer-live-badge { position: relative; z-index: 3; margin: .45rem .85rem 0; display: none; align-items: center; gap: .35rem; font-size: .74rem; font-weight: 800; }
       .viewer-live-badge.show { display: inline-flex; }
       .viewer-live-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; animation: pulse 1s infinite; }
@@ -903,6 +912,7 @@
       <div class="room-view" id="roomView" role="dialog" aria-label="Live room">
         <img class="bg-img" id="roomBg" alt="" />
         <video class="room-video" id="roomVideo" autoplay playsinline muted></video>
+        <div class="guest-tiles" id="guestTiles"></div>
         <div class="bg-shade"></div>
 
         <div class="room-top">
@@ -934,6 +944,10 @@
           <div class="watcher-panel" id="watcherPanel" style="display:none">
             <div class="whead">Viewers in your live</div>
             <div id="watcherList"></div>
+            <div class="guest-reqs" id="guestReqPanel" style="display:none">
+              <div class="whead">Guest requests</div>
+              <div id="guestReqList"></div>
+            </div>
           </div>
           <div class="chat" id="chatBox"></div>
           <div class="room-actions" id="viewerActions">
@@ -941,6 +955,9 @@
               <input type="text" id="chatText" placeholder="Type a message..." maxlength="120" autocomplete="off" />
               <button type="submit">Send</button>
             </form>
+            <button class="round-btn" id="guestBtn" type="button" aria-label="Join as guest">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3.2 2.9-4.8 5.5-4.8s4.7 1.6 5.5 4.8"/><path d="M16 8.5a2.6 2.6 0 100-5.2M17.5 14.6c1.9.6 3 1.9 3.4 4.4"/></svg>
+            </button>
             <button class="round-btn" id="giftBtn" type="button" aria-label="Send a gift">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="8" width="17" height="4"/><path d="M5 12v8.5h14V12M12 8v12.5M12 8s-4.5.2-4.5-2.3C7.5 3.6 10.8 3.4 12 8zm0 0s4.5.2 4.5-2.3C16.5 3.6 13.2 3.4 12 8z"/></svg>
             </button>
@@ -1331,6 +1348,18 @@
       var hostPCs = {};        // watcherId -> RTCPeerConnection (host side)
       var watchers = {};       // v8: watcherId -> name (host ke live view ke liye)
       var viewerPC = null;     // viewer side
+      /* v20: Multi-guest live — 1 host + 4 guests */
+      var guestPCs = {};       // host side: guestId -> RTCPeerConnection (guest ki video lene ke liye)
+      var guestTracks = {};    // host side: guestId -> { video, audio, stream } (viewers ko forward karne ke liye)
+      var pcGuestSenders = {}; // host side: watcherId -> { guestId: { video, audio } } (forwarded tracks)
+      var guestPC = null;      // guest side: meri PC host ko (sirf bhejne ke liye)
+      var guestStream = null;  // guest side: mera camera jab main guest hun
+      var guestHostId = null;  // guest side: host ka socket id (guest signalling ke liye)
+      var myGuestSeat = 0;     // guest side: 0 = guest nahi, warna seat 1-4
+      var guestRequested = false; // viewer side: request bhej di, approve ka intezar
+      var guestRequests = [];  // host side: [{guestId, name}]
+      var roomSeats = [];      // sab ke liye: current seats [{seat, guestId, name, seq} | null]
+      var viewerStreams = [];  // viewer side: remote streams arrival order (pehli = host)
       var myLiveRoomId = null;
       var liveFeed = {};       // roomId -> room card data (live hosts, Home feed ke liye)
       var RTC_CONF = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }; // public internet: Google ka free STUN server — alag networks par bhi video chalegi
@@ -1368,6 +1397,8 @@
       }
       function closeViewerPC(){
         if (viewerPC) { try { viewerPC.close(); } catch (e) {} viewerPC = null; }
+        viewerStreams = []; // v20
+        renderGuestTiles(); // v20
         hideRoomVideo();
       }
       function showRoomVideo(stream, muted){
@@ -1389,6 +1420,116 @@
         v.srcObject = null;
         $("roomBg").style.display = "";
         $("viewerLiveBadge").classList.remove("show");
+      }
+
+      /* ================= v20: Multi-guest live — UI + state ================= */
+      function seatsSorted(){ return roomSeats.filter(function(x){ return !!x; }).sort(function(a,b){ return a.seq - b.seq; }); }
+      function guestStreamFor(seat, orderIdx){
+        if (room && room.isHost) {
+          var gt = guestTracks[seat.guestId];
+          return gt ? gt.stream : null;
+        }
+        if (seat.seat === myGuestSeat) return guestStream; // apni video local dikhayein
+        return viewerStreams[orderIdx + 1] || null; // host = index 0, phir guests seq order mein
+      }
+      function renderGuestTiles(){
+        var wrap = $("guestTiles"); if (!wrap) return;
+        while (wrap.children.length < 4) {
+          var t = document.createElement("div");
+          t.className = "guest-tile";
+          t.innerHTML = '<video autoplay playsinline muted></video><span class="gname"></span><button type="button" class="gkick" aria-label="Remove guest">\u00d7</button>';
+          wrap.appendChild(t);
+        }
+        var ordered = seatsSorted();
+        for (var i = 0; i < 4; i++) {
+          var tile = wrap.children[i];
+          var seat = ordered[i] || null;
+          var vid = tile.querySelector("video");
+          var nm = tile.querySelector(".gname");
+          var kick = tile.querySelector(".gkick");
+          if (!seat) { tile.classList.remove("on"); if (vid.srcObject) vid.srcObject = null; nm.textContent = ""; kick.style.display = "none"; continue; }
+          tile.classList.add("on");
+          nm.textContent = seat.name || "Guest";
+          var stream = guestStreamFor(seat, i);
+          if (stream && vid.srcObject !== stream) { vid.srcObject = stream; vid.play().catch(function(){}); }
+          else if (!stream && vid.srcObject) { vid.srcObject = null; }
+          if (room && room.isHost) {
+            kick.style.display = "";
+            kick.onclick = (function(gid){ return function(){ kickGuest(gid); }; })(seat.guestId);
+          } else kick.style.display = "none";
+        }
+      }
+      function renderGuestBtn(){
+        var b = $("guestBtn"); if (!b) return;
+        if (!room || room.isHost) { b.style.display = "none"; return; }
+        b.style.display = "";
+        if (myGuestSeat) { b.classList.add("guest-on"); b.setAttribute("aria-label", "Leave guest seat"); }
+        else { b.classList.remove("guest-on"); b.setAttribute("aria-label", guestRequested ? "Guest request sent" : "Join as guest"); }
+      }
+      function requestGuest(){
+        if (!room || room.isHost || myGuestSeat || guestRequested) return;
+        if (!currentUser) { toast("Log in first to join as guest."); return; }
+        var s = connectSocket();
+        if (!s || !currentRoomId) return;
+        guestRequested = true;
+        renderGuestBtn();
+        s.emit("guest request", { room: currentRoomId, name: myName() });
+        toast("Guest request sent to host.");
+      }
+      function leaveGuest(){
+        var s = connectSocket();
+        if (s && currentRoomId && myGuestSeat) s.emit("guest leave", { room: currentRoomId });
+        cleanupGuestState();
+      }
+      function cleanupGuestState(){
+        if (guestPC) { try { guestPC.close(); } catch(e){} guestPC = null; }
+        if (guestStream) { guestStream.getTracks().forEach(function(t){ try { t.stop(); } catch(e){} }); guestStream = null; }
+        myGuestSeat = 0; guestHostId = null; guestRequested = false;
+        renderGuestBtn();
+        renderGuestTiles();
+      }
+      function approveGuest(guestId, name){
+        var s = connectSocket();
+        if (s && myLiveRoomId) s.emit("guest approve", { room: myLiveRoomId, guestId: guestId, name: name });
+        guestRequests = guestRequests.filter(function(r){ return r.guestId !== guestId; });
+        renderGuestRequests();
+      }
+      function rejectGuest(guestId){
+        var s = connectSocket();
+        if (s && myLiveRoomId) s.emit("guest reject", { room: myLiveRoomId, guestId: guestId });
+        guestRequests = guestRequests.filter(function(r){ return r.guestId !== guestId; });
+        renderGuestRequests();
+      }
+      function kickGuest(guestId){
+        var s = connectSocket();
+        if (s && myLiveRoomId) s.emit("guest kick", { room: myLiveRoomId, guestId: guestId });
+      }
+      function renderGuestRequests(){
+        var panel = $("guestReqPanel"); if (!panel) return;
+        var list = $("guestReqList"); if (!list) return;
+        list.innerHTML = "";
+        if (!room || !room.isHost || !guestRequests.length) { panel.style.display = "none"; return; }
+        panel.style.display = "";
+        guestRequests.forEach(function(r){
+          var row = document.createElement("div");
+          row.className = "watcher-row";
+          var nm = document.createElement("span");
+          nm.className = "wname"; nm.textContent = r.name;
+          var ok = document.createElement("button");
+          ok.type = "button"; ok.className = "watcher-block"; ok.textContent = "Approve";
+          ok.addEventListener("click", function(){ approveGuest(r.guestId, r.name); });
+          var no = document.createElement("button");
+          no.type = "button"; no.className = "watcher-block"; no.textContent = "Reject";
+          no.addEventListener("click", function(){ rejectGuest(r.guestId); });
+          row.appendChild(nm); row.appendChild(ok); row.appendChild(no);
+          list.appendChild(row);
+        });
+      }
+      function closeGuestPCs(){
+        Object.keys(guestPCs).forEach(function(id){ try { guestPCs[id].close(); } catch(e){} });
+        guestPCs = {};
+        guestTracks = {};
+        pcGuestSenders = {};
       }
       function requestWatch(roomId){
         var s = connectSocket();
@@ -1427,6 +1568,7 @@
           delete liveFeed[d.room];
           renderHome();
           if (room && !room.isHost && currentRoomId === d.room) {
+            cleanupGuestState(); // v20: guest tha to seat/camera band
             closeViewerPC();
             addChat("Live ended.", "join-msg");
           }
@@ -1455,6 +1597,12 @@
           var pc = new RTCPeerConnection(RTC_CONF);
           hostPCs[d.watcherId] = pc;
           localStream.getTracks().forEach(function(t){ pc.addTrack(t, localStream); });
+          // v20: maujooda guests ki video bhi naye viewer ko (apni khud ki nahi)
+          seatsSorted().forEach(function(seat){
+            if (seat.guestId === d.watcherId) return;
+            var gt0 = guestTracks[seat.guestId];
+            if (gt0) forwardGuestToPC(pc, d.watcherId, seat.guestId, gt0);
+          });
           pc.onicecandidate = function(e){
             if (e.candidate) s.emit("ice", { to: d.watcherId, room: myLiveRoomId, candidate: e.candidate });
           };
@@ -1467,12 +1615,33 @@
         // Viewer side: host ki offer mili — answer bhejein
         s.on("offer", function(d){
           if (!room || room.isHost || !d || d.room !== currentRoomId) return;
+          if (viewerPC) { // v20 renegotiation: guest aaya/gaya — purani PC reuse karein
+            viewerPC.setRemoteDescription(new RTCSessionDescription(d.sdp)).then(function(){
+              return viewerPC.createAnswer();
+            }).then(function(ans){
+              return viewerPC.setLocalDescription(ans);
+            }).then(function(){
+              s.emit("answer", { to: d.from, room: d.room, sdp: viewerPC.localDescription });
+            }).catch(function(){});
+            return;
+          }
           closeViewerPC();
           var pc = new RTCPeerConnection(RTC_CONF);
           viewerPC = pc;
           pc.ontrack = function(e){
             var stream = e.streams && e.streams[0];
-            if (stream) showRoomVideo(stream, false);
+            if (!stream) return;
+            if (viewerStreams.indexOf(stream) === -1) { // v20: har stream ek dafa
+              viewerStreams.push(stream);
+              stream.getTracks().forEach(function(t){
+                t.onended = function(){
+                  var ix = viewerStreams.indexOf(stream);
+                  if (ix > 0) { viewerStreams.splice(ix, 1); renderGuestTiles(); }
+                };
+              });
+            }
+            if (viewerStreams[0] === stream) showRoomVideo(stream, false); // host = pehli stream
+            else renderGuestTiles(); // v20: guest ki stream
           };
           pc.onicecandidate = function(e){
             if (e.candidate) s.emit("ice", { to: d.from, room: d.room, candidate: e.candidate });
@@ -1506,6 +1675,173 @@
             closePCFor(d.watcherId);
             if (watchers[d.watcherId]) { delete watchers[d.watcherId]; renderWatcherList(); } // v8
           }
+        });
+
+        /* ================= v20: Multi-guest live — signalling ================= */
+        // Host ko viewer PC par guest ki tracks forward karne ke helpers
+        function forwardGuestToPC(pc, pcKey, guestId, gt){
+          if (!pcGuestSenders[pcKey]) pcGuestSenders[pcKey] = {};
+          var done = pcGuestSenders[pcKey][guestId] || (pcGuestSenders[pcKey][guestId] = { video: null, audio: null });
+          var added = false;
+          if (gt.video && !done.video) { try { done.video = pc.addTrack(gt.video, gt.stream); added = true; } catch(e){} }
+          if (gt.audio && !done.audio) { try { done.audio = pc.addTrack(gt.audio, gt.stream); added = true; } catch(e){} }
+          return added;
+        }
+        function renegotiateViewerPC(watcherId){
+          var pc = hostPCs[watcherId];
+          if (!pc || !myLiveRoomId) return;
+          pc.createOffer().then(function(offer){ return pc.setLocalDescription(offer); }).then(function(){
+            s.emit("offer", { to: watcherId, room: myLiveRoomId, sdp: pc.localDescription });
+          }).catch(function(){});
+        }
+        function forwardGuestEverywhere(guestId){
+          var gt = guestTracks[guestId];
+          if (!gt) return;
+          // sab viewers ko (guest ko us ki khud ki video nahi — echo se bachne ke liye)
+          Object.keys(hostPCs).forEach(function(wid){
+            if (wid === guestId) return;
+            if (forwardGuestToPC(hostPCs[wid], wid, guestId, gt)) renegotiateViewerPC(wid);
+          });
+        }
+        function removeGuestForwarding(guestId){
+          Object.keys(pcGuestSenders).forEach(function(pcKey){
+            var m = pcGuestSenders[pcKey];
+            if (!m || !m[guestId]) return;
+            var pc = hostPCs[pcKey];
+            ["video", "audio"].forEach(function(k){
+              var sender = m[guestId][k];
+              if (sender) { try { if (pc) pc.removeTrack(sender); } catch(e){} }
+            });
+            delete m[guestId];
+            if (pc) renegotiateViewerPC(pcKey);
+          });
+        }
+        function reconcileGuestPCs(){
+          var seated = {};
+          roomSeats.forEach(function(x){ if (x) seated[x.guestId] = true; });
+          Object.keys(guestPCs).forEach(function(gid){
+            if (seated[gid]) return;
+            try { guestPCs[gid].close(); } catch(e){}
+            delete guestPCs[gid];
+            removeGuestForwarding(gid);
+            delete guestTracks[gid];
+          });
+          guestRequests = guestRequests.filter(function(r){ return !seated[r.guestId]; });
+          renderGuestRequests();
+        }
+        function onGuestTrack(guestId, e){
+          var track = e.track;
+          if (!track) return;
+          var gt = guestTracks[guestId];
+          if (!gt) { gt = { video: null, audio: null, stream: new MediaStream() }; guestTracks[guestId] = gt; }
+          if (track.kind === "video" && !gt.video) { gt.video = track; gt.stream.addTrack(track); }
+          else if (track.kind === "audio" && !gt.audio) { gt.audio = track; gt.stream.addTrack(track); }
+          else return;
+          forwardGuestEverywhere(guestId);
+          renderGuestTiles();
+        }
+
+        s.on("guest request", function(d){
+          if (!room || !room.isHost || !myLiveRoomId || !d || d.room !== myLiveRoomId) return;
+          if (guestRequests.some(function(r){ return r.guestId === d.guestId; })) return;
+          guestRequests.push({ guestId: d.guestId, name: d.name || "Guest" });
+          renderGuestRequests();
+          toast((d.name || "Guest") + " wants to join as guest");
+        });
+        s.on("guest approved", function(d){
+          if (!d || d.room !== currentRoomId) return;
+          myGuestSeat = d.seat || 0;
+          guestHostId = d.hostId || null;
+          guestRequested = false;
+          renderGuestBtn();
+          renderGuestTiles();
+          startCamera().then(function(stream){
+            guestStream = stream;
+            renderGuestTiles(); // apni video apni tile mein
+            var pc = new RTCPeerConnection(RTC_CONF);
+            guestPC = pc;
+            guestStream.getTracks().forEach(function(t){ pc.addTrack(t, guestStream); });
+            pc.onicecandidate = function(ev){
+              if (ev.candidate && guestHostId) s.emit("guest ice", { to: guestHostId, room: currentRoomId, candidate: ev.candidate });
+            };
+            return pc.createOffer();
+          }).then(function(offer){
+            if (!guestPC) return;
+            return guestPC.setLocalDescription(offer);
+          }).then(function(){
+            if (guestPC && guestHostId) s.emit("guest offer", { to: guestHostId, room: currentRoomId, sdp: guestPC.localDescription });
+          }).catch(function(){
+            toast("Could not start camera for guest seat.");
+            leaveGuest();
+          });
+        });
+        s.on("guest rejected", function(d){
+          if (!d || d.room !== currentRoomId) return;
+          guestRequested = false;
+          renderGuestBtn();
+          toast("Host declined your guest request.");
+        });
+        s.on("guest request failed", function(d){
+          guestRequested = false;
+          renderGuestBtn();
+          toast(d && d.reason === "full" ? "All guest seats are full." : "Could not join as guest.");
+        });
+        s.on("guest removed", function(d){
+          if (!d || d.room !== currentRoomId) return;
+          cleanupGuestState();
+          toast("Host removed you from the guest seat.");
+        });
+        s.on("guest seats", function(d){
+          if (!d || d.room !== currentRoomId) return;
+          roomSeats = d.seats || [];
+          if (room && room.isHost) reconcileGuestPCs();
+          renderGuestTiles();
+        });
+        s.on("guest offer", function(d){
+          if (!d || d.room !== currentRoomId) return;
+          if (room && room.isHost) {
+            // guest ki offer — us ki PC banayein (pehli dafa) ya renegotiation
+            var gpc = guestPCs[d.from];
+            if (!gpc) {
+              gpc = new RTCPeerConnection(RTC_CONF);
+              guestPCs[d.from] = gpc;
+              gpc.onicecandidate = function(ev){
+                if (ev.candidate) s.emit("guest ice", { to: d.from, room: currentRoomId, candidate: ev.candidate });
+              };
+              gpc.ontrack = function(ev){ onGuestTrack(d.from, ev); };
+            }
+            gpc.setRemoteDescription(new RTCSessionDescription(d.sdp)).then(function(){
+              return gpc.createAnswer();
+            }).then(function(ans){
+              return gpc.setLocalDescription(ans);
+            }).then(function(){
+              s.emit("guest answer", { to: d.from, room: currentRoomId, sdp: gpc.localDescription });
+            }).catch(function(){});
+          } else if (myGuestSeat) {
+            // host ki renegotiation offer — purani guestPC reuse karein
+            if (!guestPC) return;
+            guestPC.setRemoteDescription(new RTCSessionDescription(d.sdp)).then(function(){
+              return guestPC.createAnswer();
+            }).then(function(ans){
+              return guestPC.setLocalDescription(ans);
+            }).then(function(){
+              if (guestHostId) s.emit("guest answer", { to: guestHostId, room: currentRoomId, sdp: guestPC.localDescription });
+            }).catch(function(){});
+          }
+        });
+        s.on("guest answer", function(d){
+          if (!d || d.room !== currentRoomId) return;
+          var pc = null;
+          if (room && room.isHost) pc = guestPCs[d.from];
+          else if (myGuestSeat) pc = guestPC;
+          if (pc) pc.setRemoteDescription(new RTCSessionDescription(d.sdp)).catch(function(){});
+        });
+        s.on("guest ice", function(d){
+          if (!d || !d.candidate) return;
+          var pc = null;
+          if (room && room.isHost) pc = guestPCs[d.from];
+          else if (myGuestSeat) pc = guestPC;
+          if (pc && d.room === currentRoomId) pc.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(function(){});
         });
       }
 
@@ -1557,6 +1893,8 @@
         $("liveTimer").classList.toggle("show", room.isHost);
         $("roomView").classList.add("open");
         setCoins(coins);
+        viewerStreams = []; roomSeats = []; guestRequests = []; // v20: naye room ke liye saaf
+        renderGuestBtn(); renderGuestRequests(); renderGuestTiles(); // v20
       }
       function startRoomLoops(pool, hostMode){
         clearTimers();
@@ -1582,10 +1920,16 @@
         }
       }
       function closeRoom(){
+        if (myGuestSeat) leaveGuest(); // v20: seat chhorein
         closeViewerPC();
         leaveChatRoom();
         clearTimers();
         room = null;
+        viewerStreams = []; // v20
+        roomSeats = []; // v20
+        guestRequests = []; // v20
+        renderGuestTiles(); // v20
+        renderGuestRequests(); // v20
         $("roomView").classList.remove("open");
         $("giftTray").classList.remove("open");
         $("userSheet").classList.remove("open"); // v8
@@ -1776,6 +2120,7 @@
         var wasLiveRoom = !!myLiveRoomId;
         if (myLiveRoomId && socket) socket.emit("end live", { room: myLiveRoomId });
         closeHostPCs();
+        closeGuestPCs(); // v20
         stopCamera();
         hideRoomVideo();
         myLiveRoomId = null;
@@ -1799,6 +2144,9 @@
         renderHistory();
       }
       $("endLiveBtn").addEventListener("click", endLive);
+      $("guestBtn").addEventListener("click", function(){ // v20
+        if (myGuestSeat) leaveGuest(); else requestGuest();
+      });
       $("summaryOk").addEventListener("click", function(){
         $("summary").classList.remove("open");
         showScreen("profile");
@@ -2126,7 +2474,7 @@
           var row = document.createElement("div");
           row.className = "watcher-row";
           var nm = document.createElement("span");
-          nm.className = "wname"; nm.textContent = name;
+          nm.className = "wname"; nm.textContent = name + (roomSeats.some(function(x){ return x && x.guestId === id; }) ? " · Guest" : ""); // v20
           var b = document.createElement("button");
           b.type = "button"; b.className = "watcher-block"; b.textContent = "Block";
           b.addEventListener("click", function(){

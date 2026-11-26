@@ -698,6 +698,35 @@ const MAX_HISTORY = 50;
 // HOST laptop se (http://localhost:3000) YA phone se (https://<LAN-IP>:3443) live ja sakta hai.
 // Phone plain HTTP par sirf dekh sakta hai; dekhne ke liye camera ki zaroorat nahi hoti.
 const liveRooms = {}; // roomId -> { hostId, title, host, cat, cover }
+
+/* ================= v20: Multi-guest live — 1 host + 4 guest seats ================= */
+// Seats sirf memory mein rehti hain (live rooms ki tarah) — server restart par khatam.
+const GUEST_SEATS = 4;
+const guestSeats = {}; // roomId -> [ {seat, guestId, name, seq} | null x4 ]
+const guestSeq = {};   // roomId -> counter (tiles ki order ke liye)
+function seatsFor(roomId){
+  if (!guestSeats[roomId]) guestSeats[roomId] = [null, null, null, null];
+  return guestSeats[roomId];
+}
+function seatsPayload(roomId){
+  return seatsFor(roomId).map(function(x){ return x ? { seat: x.seat, guestId: x.guestId, name: x.name, seq: x.seq } : null; });
+}
+function broadcastSeats(roomId){
+  io.to(roomId).emit("guest seats", { room: roomId, seats: seatsPayload(roomId) });
+}
+function freeGuestSeat(roomId, guestId){
+  const seats = seatsFor(roomId);
+  let changed = false;
+  for (let i = 0; i < seats.length; i++) {
+    if (seats[i] && seats[i].guestId === guestId) { seats[i] = null; changed = true; }
+  }
+  if (changed) broadcastSeats(roomId);
+  return changed;
+}
+function clearGuestSeats(roomId){
+  delete guestSeats[roomId];
+  delete guestSeq[roomId];
+}
 const socketRoom = {}; // socketId -> roomId (signalling validation ke liye)
 
 function validRoomId(roomId){
@@ -709,6 +738,7 @@ function isHostOf(sockId, roomId){
 function endLiveRoom(roomId){
   if (!liveRooms[roomId]) return;
   delete liveRooms[roomId];
+  clearGuestSeats(roomId);
   io.emit("live ended", { room: roomId });
 }
 
@@ -789,11 +819,15 @@ io.on("connection", (sock) => {
     sock.join(roomId);
     socketRoom[sock.id] = roomId;
     sock.emit("chat history", (roomHistory[roomId] || []).slice(-MAX_HISTORY));
-    if (liveRooms[roomId]) sock.emit("live started", Object.assign({ room: roomId }, liveRooms[roomId]));
+    if (liveRooms[roomId]) {
+      sock.emit("live started", Object.assign({ room: roomId }, liveRooms[roomId]));
+      sock.emit("guest seats", { room: roomId, seats: seatsPayload(roomId) }); // v20
+    }
   });
 
   sock.on("leave room", (roomId) => {
     if (joinedRoom === roomId) {
+      freeGuestSeat(roomId, sock.id); // v20: guest tha to seat khaali karein
       sock.leave(roomId);
       joinedRoom = null;
       delete socketRoom[sock.id];
@@ -863,6 +897,100 @@ io.on("connection", (sock) => {
     endLiveRoom(roomId);
   });
 
+  // ---- v20: Multi-guest seats — request / approve / reject / leave / kick ----
+  sock.on("guest request", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const name = cleanName(data.name) || (sock.data && sock.data.userName) || "Guest";
+    const live = liveRooms[roomId];
+    if (!live) return;
+    if (socketRoom[sock.id] !== roomId) return;
+    if (roomHiddenFor(name, live.host)) { sock.emit("guest request failed", { room: roomId, reason: "blocked" }); return; }
+    if (seatsFor(roomId).some((x) => x && x.guestId === sock.id)) return; // pehle se guest hai
+    if (seatsFor(roomId).every(Boolean)) { sock.emit("guest request failed", { room: roomId, reason: "full" }); return; }
+    io.to(live.hostId).emit("guest request", { room: roomId, guestId: sock.id, name: name });
+  });
+
+  sock.on("guest approve", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const guestId = typeof data.guestId === "string" ? data.guestId : "";
+    const name = cleanName(data.name) || "Guest";
+    if (!isHostOf(sock.id, roomId)) return;
+    if (socketRoom[guestId] !== roomId) return; // guest ab room mein nahi
+    const seats = seatsFor(roomId);
+    if (seats.some((x) => x && x.guestId === guestId)) return;
+    const idx = seats.findIndex((x) => !x);
+    if (idx === -1) { sock.emit("guest request failed", { room: roomId, reason: "full" }); return; }
+    guestSeq[roomId] = (guestSeq[roomId] || 0) + 1;
+    seats[idx] = { seat: idx + 1, guestId: guestId, name: name, seq: guestSeq[roomId] };
+    io.to(guestId).emit("guest approved", { room: roomId, seat: idx + 1, hostId: sock.id });
+    broadcastSeats(roomId);
+  });
+
+  sock.on("guest reject", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const guestId = typeof data.guestId === "string" ? data.guestId : "";
+    if (!isHostOf(sock.id, roomId)) return;
+    io.to(guestId).emit("guest rejected", { room: roomId });
+  });
+
+  sock.on("guest leave", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    if (socketRoom[sock.id] !== roomId) return;
+    freeGuestSeat(roomId, sock.id);
+  });
+
+  sock.on("guest kick", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const guestId = typeof data.guestId === "string" ? data.guestId : "";
+    if (!isHostOf(sock.id, roomId)) return;
+    if (freeGuestSeat(roomId, guestId)) io.to(guestId).emit("guest removed", { room: roomId });
+  });
+
+  // ---- v20: Guest media signalling — guest offer karta hai, host answer deta hai ----
+  sock.on("guest offer", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const to = typeof data.to === "string" ? data.to : "";
+    const sdp = data.sdp && typeof data.sdp === "object" && typeof data.sdp.sdp === "string" ? data.sdp : null;
+    if (!sdp || sdp.sdp.length > 20000) return;
+    if (socketRoom[sock.id] !== roomId || socketRoom[to] !== roomId) return;
+    // offer ya to guest ki taraf se host ko, ya host ki taraf se guest ko (renegotiation)
+    const guestOk = seatsFor(roomId).some((x) => x && x.guestId === sock.id) && isHostOf(to, roomId);
+    const hostOk = isHostOf(sock.id, roomId) && seatsFor(roomId).some((x) => x && x.guestId === to);
+    if (!guestOk && !hostOk) return;
+    io.to(to).emit("guest offer", { from: sock.id, room: roomId, sdp: sdp });
+  });
+
+  sock.on("guest answer", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const to = typeof data.to === "string" ? data.to : "";
+    const sdp = data.sdp && typeof data.sdp === "object" && typeof data.sdp.sdp === "string" ? data.sdp : null;
+    if (!sdp || sdp.sdp.length > 20000) return;
+    if (socketRoom[sock.id] !== roomId || socketRoom[to] !== roomId) return;
+    const guestOk = seatsFor(roomId).some((x) => x && x.guestId === sock.id) && isHostOf(to, roomId);
+    const hostOk = isHostOf(sock.id, roomId) && seatsFor(roomId).some((x) => x && x.guestId === to);
+    if (!guestOk && !hostOk) return;
+    io.to(to).emit("guest answer", { from: sock.id, room: roomId, sdp: sdp });
+  });
+
+  sock.on("guest ice", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const to = typeof data.to === "string" ? data.to : "";
+    if (!data.candidate || typeof data.candidate !== "object") return;
+    if (socketRoom[sock.id] !== roomId || socketRoom[to] !== roomId) return;
+    const ok = (isHostOf(sock.id, roomId) && seatsFor(roomId).some((x) => x && x.guestId === to)) ||
+               (isHostOf(to, roomId) && seatsFor(roomId).some((x) => x && x.guestId === sock.id));
+    if (!ok) return;
+    io.to(to).emit("guest ice", { from: sock.id, room: roomId, candidate: data.candidate });
+  });
+
   sock.on("watch", (data) => {
     if (!data || typeof data !== "object") return;
     const roomId = typeof data.room === "string" ? data.room : "";
@@ -929,6 +1057,7 @@ io.on("connection", (sock) => {
   sock.on("disconnect", () => {
     delete socketRoom[sock.id];
     Object.keys(liveRooms).forEach((roomId) => {
+      freeGuestSeat(roomId, sock.id); // v20: guest tha to seat khaali karein
       if (liveRooms[roomId].hostId === sock.id) {
         endLiveRoom(roomId);
       } else if (joinedRoom === roomId) {
