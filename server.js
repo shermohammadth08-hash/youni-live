@@ -7,6 +7,12 @@
 // Railway par DATA_DIR=/data set karein aur /data par ek Volume lagayein —
 // phir restart ya redeploy par bhi accounts nahi mitenge. DATA_DIR set nahi hai
 // to users.json hamesha ki tarah app folder mein save hota hai (local mode).
+// REPORT / BLOCK (v8): blocks.json { blocker: [blocked, ...] } aur reports.json
+// [ { by, target, reason, text, room, time } ] bhi DATA_DIR mein save hote hain.
+// Server chat sirf un viewers ko bhejta hai jinhon ne sender ko block nahi kiya,
+// blocked host ke live room Home feed mein chhupte hain, blocked user live room
+// mein join nahi kar sakta, aur host apne room ke watcher ko block karke
+// nikaal sakta hai.
 // - manifest.webmanifest, sw.js aur icons serve hote hain (PWA install ke liye); sw.js par no-cache headers.
 // - index.html serve karta hai — HTTP port 3000 AND HTTPS port 3443 (self-signed cert)
 // - HTTPS is liye: phone ka camera sirf secure connection (HTTPS / localhost) par chalta hai.
@@ -35,6 +41,12 @@ const DATA_DIR = process.env.DATA_DIR || __dirname;
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const CERT_FILE = path.join(__dirname, "cert.pem");
 const KEY_FILE = path.join(__dirname, "key.pem");
+// v8: Report/Block — blocks.json { blockerName: [blockedName, ...] },
+// reports.json [ { by, target, reason, text, room, time } ].
+// Dono files DATA_DIR mein rehti hain (Railway: /data volume) aur
+// pehli dafa use hone par banti hain — users.json jaisa hi tareeqa.
+const BLOCKS_FILE = path.join(DATA_DIR, "blocks.json");
+const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
 
 function loadUsers() {
   try {
@@ -53,6 +65,93 @@ function saveUsers(users) {
     console.error("users.json save nahi hua:", e.message);
     return false;
   }
+}
+
+// v8: blocks + reports ki file handling — users.json wala hi pattern.
+function loadBlocks() {
+  try {
+    const b = JSON.parse(fs.readFileSync(BLOCKS_FILE, "utf8"));
+    return b && typeof b === "object" && !Array.isArray(b) ? b : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveBlocks(blocks) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(BLOCKS_FILE, JSON.stringify(blocks, null, 2));
+    return true;
+  } catch (e) {
+    console.error("blocks.json save nahi hua:", e.message);
+    return false;
+  }
+}
+
+function loadReports() {
+  try {
+    const r = JSON.parse(fs.readFileSync(REPORTS_FILE, "utf8"));
+    return Array.isArray(r) ? r : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveReports(reports) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(REPORTS_FILE, JSON.stringify(reports, null, 2));
+    return true;
+  } catch (e) {
+    console.error("reports.json save nahi hua:", e.message);
+    return false;
+  }
+}
+
+// In-memory block cache — socket hot path ke liye (file har dafa nahi parhte).
+// REST aur socket handlers is cache ko update karte hain aur file save karte hain.
+let blocksCache = loadBlocks();
+
+function cleanName(s) {
+  return typeof s === "string" ? s.trim() : "";
+}
+
+// Naam ka muqabla hamesha case-insensitive (register/login jaisa).
+function blocksListOf(name) {
+  const key = Object.keys(blocksCache).find((k) => k.toLowerCase() === name.toLowerCase());
+  return key ? blocksCache[key] : [];
+}
+
+function hasBlocked(blocker, target) {
+  if (!blocker || !target) return false;
+  return blocksListOf(blocker).some((n) => n.toLowerCase() === target.toLowerCase());
+}
+
+// Duplicate block no-op success hai. Save fail ho to cache wapas.
+function addBlock(blocker, target) {
+  const key = Object.keys(blocksCache).find((k) => k.toLowerCase() === blocker.toLowerCase());
+  const list = key ? blocksCache[key] : [];
+  if (list.some((n) => n.toLowerCase() === target.toLowerCase())) return true;
+  const newList = list.concat([target]);
+  if (key) blocksCache[key] = newList; else blocksCache[blocker] = newList;
+  if (!saveBlocks(blocksCache)) {
+    if (key) blocksCache[key] = list; else delete blocksCache[blocker];
+    return false;
+  }
+  return true;
+}
+
+function removeBlock(blocker, target) {
+  const key = Object.keys(blocksCache).find((k) => k.toLowerCase() === blocker.toLowerCase());
+  if (!key) return true;
+  const old = blocksCache[key];
+  const list = old.filter((n) => n.toLowerCase() !== target.toLowerCase());
+  if (!list.length) delete blocksCache[key]; else blocksCache[key] = list;
+  if (!saveBlocks(blocksCache)) {
+    blocksCache[key] = old;
+    return false;
+  }
+  return true;
 }
 
 function hashPassword(password) {
@@ -153,16 +252,86 @@ function handleLogin(data, res) {
   sendJSON(res, 200, { ok: true, name: key });
 }
 
+// v8: Block / Report — register/login jaisi hi validation.
+const REPORT_REASONS = ["spam", "abuse", "bad content", "fake", "other"];
+
+function blockTargetError(name, target) {
+  if (!name) return "Naam likhein.";
+  if (name.length > 30) return "Naam 30 harf se zyada nahi.";
+  if (!target) return "Kis ko block karna hai, naam likhein.";
+  if (target.length > 30) return "Naam 30 harf se zyada nahi.";
+  if (name.toLowerCase() === target.toLowerCase()) return "Khud ko block nahi kar sakte.";
+  return null;
+}
+
+function handleBlock(data, res) {
+  const name = cleanName(data.name);
+  const target = cleanName(data.target);
+  const err = blockTargetError(name, target);
+  if (err) return sendJSON(res, 400, { ok: false, error: err });
+  if (!addBlock(name, target)) return sendJSON(res, 500, { ok: false, error: "Block save nahi hua — dobara koshish karein." });
+  sendJSON(res, 200, { ok: true, blocked: blocksListOf(name) });
+}
+
+function handleUnblock(data, res) {
+  const name = cleanName(data.name);
+  const target = cleanName(data.target);
+  const err = blockTargetError(name, target);
+  if (err) return sendJSON(res, 400, { ok: false, error: err });
+  if (!removeBlock(name, target)) return sendJSON(res, 500, { ok: false, error: "Unblock save nahi hua — dobara koshish karein." });
+  sendJSON(res, 200, { ok: true, blocked: blocksListOf(name) });
+}
+
+function handleGetBlocks(req, res) {
+  const q = req.url.includes("?") ? req.url.split("?")[1] : "";
+  const name = cleanName(new URLSearchParams(q).get("name") || "");
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
+  sendJSON(res, 200, { ok: true, blocked: blocksListOf(name) });
+}
+
+function handleReport(data, res) {
+  const name = cleanName(data.name);
+  const target = cleanName(data.target);
+  const reason = typeof data.reason === "string" ? data.reason.trim() : "";
+  const text = typeof data.text === "string" ? data.text.trim() : "";
+  const room = typeof data.room === "string" ? data.room.trim().slice(0, 60) : "";
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Naam likhein." });
+  if (name.length > 30) return sendJSON(res, 400, { ok: false, error: "Naam 30 harf se zyada nahi." });
+  if (!target) return sendJSON(res, 400, { ok: false, error: "Kis ko report karna hai, naam likhein." });
+  if (target.length > 30) return sendJSON(res, 400, { ok: false, error: "Naam 30 harf se zyada nahi." });
+  if (name.toLowerCase() === target.toLowerCase()) return sendJSON(res, 400, { ok: false, error: "Khud ko report nahi kar sakte." });
+  if (!REPORT_REASONS.includes(reason)) return sendJSON(res, 400, { ok: false, error: "Report ki wajah chunein." });
+  if (text.length > 200) return sendJSON(res, 400, { ok: false, error: "Report 200 harf se zyada nahi." });
+  const reports = loadReports();
+  reports.push({ by: name, target: target, reason: reason, text: text, room: room, time: new Date().toISOString() });
+  if (reports.length > 500) reports.splice(0, reports.length - 500);
+  if (!saveReports(reports)) return sendJSON(res, 500, { ok: false, error: "Report save nahi hua — dobara koshish karein." });
+  sendJSON(res, 200, { ok: true });
+}
+
+// Reports screen ke liye — v1 mein koi bhi logged-in user dekh sakta hai.
+function handleGetReports(req, res) {
+  const reports = loadReports().slice().reverse().slice(0, 100);
+  sendJSON(res, 200, { ok: true, reports: reports });
+}
+
 function handleRequest(req, res) {
   const url = req.url.split("?")[0];
 
-  if (req.method === "POST" && (url === "/api/register" || url === "/api/login")) {
+  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report")) {
     readBody(req).then((data) => {
       if (url === "/api/register") handleRegister(data, res);
-      else handleLogin(data, res);
+      else if (url === "/api/login") handleLogin(data, res);
+      else if (url === "/api/block") handleBlock(data, res);
+      else if (url === "/api/unblock") handleUnblock(data, res);
+      else handleReport(data, res);
     }).catch(() => sendJSON(res, 400, { ok: false, error: "Ghalat data bheja gaya." }));
     return;
   }
+
+  // v8: blocked list aur reports padhna (GET).
+  if (req.method === "GET" && url === "/api/blocks") { handleGetBlocks(req, res); return; }
+  if (req.method === "GET" && url === "/api/reports") { handleGetReports(req, res); return; }
 
   if (req.method !== "GET") {
     res.writeHead(405);
@@ -173,9 +342,9 @@ function handleRequest(req, res) {
   let file = url === "/" ? "/index.html" : url;
   const full = path.join(__dirname, file);
   const resolved = path.resolve(full);
-  // Public version: sirf ye files serve hongi. users.json, cert.pem, key.pem,
-  // server.js aur package.json jaise files kabhi file ki tarah serve nahi hongi,
-  // aur folder se bahar koi file nahi:
+  // Public version: sirf ye files serve hongi. users.json, blocks.json,
+  // reports.json, cert.pem, key.pem, server.js aur package.json jaise files
+  // kabhi file ki tarah serve nahi hongi, aur folder se bahar koi file nahi:
   const PUBLIC_FILES = new Set(["index.html", "manifest.webmanifest", "sw.js", "icon-180.png", "icon-192.png", "icon-512.png"]);
   if (!PUBLIC_FILES.has(path.basename(resolved)) || !resolved.startsWith(__dirname)) {
     res.writeHead(404);
@@ -245,15 +414,68 @@ function endLiveRoom(roomId){
   io.emit("live ended", { room: roomId });
 }
 
+/* ================= v8: Report/Block enforcement (server-side) ================= */
+// Har socket ka username sock.data.userName mein rehta hai — client "identify"
+// event se bhejta hai; demo rooms mein chat karne wale ka naam fallback hai.
+// Live list / live started: wo room chhupayein jahan viewer ne host ko block
+// kiya ho YA host ne viewer ko block kiya ho. Chat: har viewer ko alag se
+// bhejein — jis ne sender ko block kiya hai use message nahi milta.
+function roomHiddenFor(viewerName, hostName){
+  if (!viewerName || !hostName) return false;
+  return hasBlocked(viewerName, hostName) || hasBlocked(hostName, viewerName);
+}
+
+function liveListFor(viewerName){
+  return Object.keys(liveRooms)
+    .filter((rid) => !roomHiddenFor(viewerName, liveRooms[rid].host))
+    .map((rid) => Object.assign({ room: rid }, liveRooms[rid]));
+}
+
+function emitChatToRoom(roomId, msg){
+  for (const [, s] of io.sockets.sockets) {
+    if (!s.rooms.has(roomId)) continue;
+    const viewer = (s.data && s.data.userName) || "";
+    if (viewer && hasBlocked(viewer, msg.name)) continue;
+    s.emit("chat message", msg);
+  }
+}
+
+function emitLiveStarted(info){
+  for (const [, s] of io.sockets.sockets) {
+    const viewer = (s.data && s.data.userName) || "";
+    if (roomHiddenFor(viewer, info.host)) continue;
+    s.emit("live started", info);
+  }
+}
+
 io.on("connection", (sock) => {
   let joinedRoom = null;
 
   // Naye connect hone wale ko pehle se live rooms ki list (Home feed ke liye)
   sock.emit("live list", Object.keys(liveRooms).map((rid) => Object.assign({ room: rid }, liveRooms[rid])));
 
+  // v8: client apna logged-in naam batata hai — is se block filtering hoti hai.
+  // Identify aate hi filtered live list dobara bhejein (blocked hosts chhup jayein).
+  sock.on("identify", (name) => {
+    const n = cleanName(name);
+    if (!n) return;
+    sock.data.userName = n;
+    sock.emit("live list", liveListFor(n));
+  });
+
   sock.on("join room", (roomId) => {
     if (typeof roomId !== "string") return;
     if (!DEMO_ROOMS.has(roomId) && !roomId.startsWith("live-")) return;
+    // v8: live room mein join nahi — agar host ne joiner ko block kiya ho
+    // ya joiner ne host ko block kiya ho.
+    const live = liveRooms[roomId];
+    if (live) {
+      const joiner = (sock.data && sock.data.userName) || "";
+      if (joiner && roomHiddenFor(joiner, live.host)) {
+        sock.emit("blocked", { room: roomId, message: "You can't join this live — you are blocked." });
+        return;
+      }
+    }
     if (joinedRoom) sock.leave(joinedRoom);
     joinedRoom = roomId;
     sock.join(roomId);
@@ -281,12 +503,16 @@ io.on("connection", (sock) => {
     const name = typeof data.name === "string" ? data.name.trim().slice(0, 30) : "";
     const text = typeof data.text === "string" ? data.text.trim() : "";
     if (!roomId || roomId !== joinedRoom) return; // sirf apne room mein bhej sakta hai
+    if (!sock.rooms.has(roomId)) return; // v8: room se nikaale gaye (block) to message nahi
     if (!name || !text || text.length > 200) return;
     const msg = { room: roomId, name: name, text: text, time: Date.now() };
     if (!roomHistory[roomId]) roomHistory[roomId] = [];
     roomHistory[roomId].push(msg);
     if (roomHistory[roomId].length > MAX_HISTORY) roomHistory[roomId] = roomHistory[roomId].slice(-MAX_HISTORY);
-    io.to(roomId).emit("chat message", msg);
+    // v8: chat karne wale ka naam yaad rakhein (demo rooms ka fallback),
+    // aur message sirf un viewers ko bhejein jinhon ne sender ko block nahi kiya.
+    if (!sock.data.userName) sock.data.userName = name;
+    emitChatToRoom(roomId, msg);
   });
 
   // ---- WebRTC signalling: sirf usi room ke andar, host <-> watcher ----
@@ -299,7 +525,8 @@ io.on("connection", (sock) => {
     const cat = typeof data.cat === "string" ? data.cat.slice(0, 20) : "Chat";
     const cover = typeof data.cover === "string" ? data.cover.slice(0, 30) : "singer";
     liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover };
-    io.emit("live started", Object.assign({ room: roomId }, liveRooms[roomId]));
+    if (!sock.data.userName) sock.data.userName = host;
+    emitLiveStarted(Object.assign({ room: roomId }, liveRooms[roomId]));
   });
 
   sock.on("end live", (data) => {
@@ -313,7 +540,32 @@ io.on("connection", (sock) => {
     if (!data || typeof data !== "object") return;
     const roomId = typeof data.room === "string" ? data.room : "";
     if (roomId !== joinedRoom || !liveRooms[roomId]) return;
-    io.to(liveRooms[roomId].hostId).emit("watcher", { watcherId: sock.id, room: roomId });
+    // v8: watcher ka naam bhi host ko bhejein — host apne live view mein
+    // watcher ke naam ke saath Block button dekhega.
+    const wname = cleanName(data.name) || (sock.data && sock.data.userName) || "";
+    io.to(liveRooms[roomId].hostId).emit("watcher", { watcherId: sock.id, room: roomId, name: wname });
+  });
+
+  // v8: host apne live room ke watcher ko block kare — sirf host kar sakta hai.
+  // Watcher host ki block list mein aa jata hai aur room se nikaal diya jata hai.
+  sock.on("block user", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const target = cleanName(data.target);
+    if (!roomId || !target) return;
+    if (!isHostOf(sock.id, roomId)) return;
+    const hostName = liveRooms[roomId].host;
+    if (!hostName || hostName.toLowerCase() === target.toLowerCase()) return;
+    if (!addBlock(hostName, target)) return;
+    for (const [, s] of io.sockets.sockets) {
+      const sName = (s.data && s.data.userName) || "";
+      if (sName && sName.toLowerCase() === target.toLowerCase() && s.rooms.has(roomId)) {
+        s.leave(roomId);
+        if (socketRoom[s.id] === roomId) delete socketRoom[s.id];
+        s.emit("you were blocked", { room: roomId, message: "The host removed you from this live." });
+      }
+    }
+    sock.emit("user blocked", { room: roomId, target: target });
   });
 
   sock.on("offer", (data) => {

@@ -505,6 +505,25 @@
       }
       .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+      /* ---------- v8: Report / Block ---------- */
+      .who-click { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+      .watcher-panel {
+        position: relative; z-index: 3; background: rgba(10,10,16,.55); border-radius: 12px;
+        padding: .5rem .65rem; margin-bottom: .55rem; max-height: 20dvh; overflow-y: auto;
+      }
+      .watcher-panel .whead { font-size: .78rem; font-weight: 800; opacity: .9; margin-bottom: .25rem; }
+      .watcher-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .32rem 0; font-size: .83rem; }
+      .watcher-row .wname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .watcher-block {
+        border: none; background: var(--brand); color: #fff; font-weight: 800; font-size: .74rem;
+        border-radius: 999px; padding: .35rem .75rem; cursor: pointer; min-height: 2rem; flex: 0 0 auto;
+      }
+      .user-sheet .reason { display: flex; gap: .5rem; align-items: center; padding: .42rem 0; font-size: .9rem; cursor: pointer; }
+      .user-sheet .reason input { accent-color: var(--brand); }
+      .list-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .65rem .8rem; margin-bottom: .5rem; font-size: .85rem; }
+      .list-row small { color: var(--ink-soft); font-size: .76rem; }
+      .btn-danger { border: none; background: var(--brand); color: #fff; font-weight: 800; border-radius: 10px; padding: .5rem .8rem; cursor: pointer; min-height: 2.4rem; font-size: .82rem; flex: 0 0 auto; }
+
       @media (prefers-reduced-motion: reduce) {
         .heart-fly, .live-badge::before, .live-timer .rec { animation: none; }
         .gift-tray { transition: none; }
@@ -639,7 +658,29 @@
               <h3>My Past Lives</h3>
               <div id="historyList"><p class="hist-empty">No lives yet. Start your first live!</p></div>
             </div>
+            <button class="btn-auth-secondary" id="blockedBtn" type="button">Blocked users</button>
+            <button class="btn-auth-secondary" id="reportsBtn" type="button">Reports</button>
             <button class="btn-logout" id="logoutBtn" type="button">Log out</button>
+          </div>
+        </section>
+
+        <!-- ===== BLOCKED USERS (v8) ===== -->
+        <section class="screen" id="screen-blocked">
+          <div class="profile-wrap">
+            <h2 style="font-size:1.25rem;margin:.2rem 0 .3rem">Blocked users</h2>
+            <p class="sub" style="color:var(--ink-soft);font-size:.88rem;margin:0 0 1rem;line-height:1.5">People you blocked can't send you chat messages and can't join your live. Tap Unblock to allow them again.</p>
+            <div id="blockedList"></div>
+            <button class="btn-auth-secondary" id="blockedBackBtn" type="button">Back to Profile</button>
+          </div>
+        </section>
+
+        <!-- ===== REPORTS (v8) ===== -->
+        <section class="screen" id="screen-reports">
+          <div class="profile-wrap">
+            <h2 style="font-size:1.25rem;margin:.2rem 0 .3rem">Reports</h2>
+            <p class="sub" style="color:var(--ink-soft);font-size:.88rem;margin:0 0 1rem;line-height:1.5">Reports sent by users. In this version any logged-in user can see them.</p>
+            <div id="reportsList"></div>
+            <button class="btn-auth-secondary" id="reportsBackBtn" type="button">Back to Profile</button>
           </div>
         </section>
       </div>
@@ -694,6 +735,10 @@
         <div class="gift-burst" id="giftBurst"><div class="inner" id="giftBurstInner"></div></div>
 
         <div class="room-bottom">
+          <div class="watcher-panel" id="watcherPanel" style="display:none">
+            <div class="whead">Viewers in your live</div>
+            <div id="watcherList"></div>
+          </div>
           <div class="chat" id="chatBox"></div>
           <div class="room-actions" id="viewerActions">
             <form class="chat-input" id="chatForm">
@@ -721,6 +766,28 @@
           <h3>Send a Gift</h3>
           <p class="bal-line">You have <b id="trayCoins">0</b> coins · Recharge for free from Profile</p>
           <div class="gift-grid" id="giftGrid"></div>
+        </div>
+
+        <!-- v8: user menu (Block / Report) -->
+        <div class="gift-tray user-sheet" id="userSheet">
+          <div id="userMenuView">
+            <h3 id="userMenuName">User</h3>
+            <p class="bal-line">What do you want to do with this user?</p>
+            <button class="btn-primary" id="userBlockBtn" type="button" style="margin-bottom:.6rem">Block user</button>
+            <button class="btn-auth-secondary" id="userReportBtn" type="button" style="margin-top:0">Report user</button>
+            <button class="btn-auth-secondary" id="userMenuCancelBtn" type="button">Cancel</button>
+          </div>
+          <div id="userReportView" style="display:none">
+            <h3>Report <span id="userReportName"></span></h3>
+            <p class="bal-line">Choose a reason:</p>
+            <div id="reportReasons"></div>
+            <div class="field" style="margin-top:.6rem">
+              <label for="reportText">Details (optional)</label>
+              <input type="text" id="reportText" maxlength="200" placeholder="Short details..." />
+            </div>
+            <button class="btn-primary" id="reportSendBtn" type="button" style="margin-bottom:.6rem">Send report</button>
+            <button class="btn-auth-secondary" id="reportCancelBtn" type="button">Cancel</button>
+          </div>
         </div>
       </div>
 
@@ -935,10 +1002,10 @@
       var currentRoomId = null;
       var historyForRoom = null;
       function myName(){ return currentUser ? currentUser.name : "Guest"; }
-      function esc(s){ return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+      function esc(s){ return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
       function realChatHTML(m){
         var liveTag = '<span style="background:#22c55e;color:#fff;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:5px;vertical-align:middle">LIVE</span>';
-        return '<span class="who" style="color:' + nameColor(m.name) + '">' + esc(m.name) + '</span>' + esc(m.text) + liveTag;
+        return '<span class="who who-click" data-name="' + esc(m.name) + '" style="color:' + nameColor(m.name) + '">' + esc(m.name) + '</span>' + esc(m.text) + liveTag;
       }
       function connectSocket(){
         if (socket) return socket;
@@ -946,6 +1013,7 @@
         socket = io();
         bindVideoEvents(socket);
         socket.on("connect", function(){
+          socket.emit("identify", myName()); // v8: server ko apna naam batayein (block filtering ke liye)
           if (currentRoomId) socket.emit("join room", currentRoomId);
         });
         socket.on("chat history", function(list){
@@ -982,6 +1050,7 @@
          ki zaroorat nahi hoti. Video server par save nahi hoti. */
       var localStream = null;
       var hostPCs = {};        // watcherId -> RTCPeerConnection (host side)
+      var watchers = {};       // v8: watcherId -> name (host ke live view ke liye)
       var viewerPC = null;     // viewer side
       var myLiveRoomId = null;
       var liveFeed = {};       // roomId -> room card data (live hosts, Home feed ke liye)
@@ -1034,20 +1103,24 @@
       }
       function requestWatch(roomId){
         var s = connectSocket();
-        if (s && window.location.protocol !== "file:") s.emit("watch", { room: roomId });
+        if (s && window.location.protocol !== "file:") s.emit("watch", { room: roomId, name: myName() });
       }
       function bindVideoEvents(s){
         if (s._videoBound) return; s._videoBound = true;
 
         s.on("live list", function(list){
+          // v8: list dobara banayein — blocked hosts ke room is list mein nahi hote
+          var keep = {};
           (list || []).forEach(function(info){
             if (!info || !info.room) return;
+            keep[info.room] = true;
             liveFeed[info.room] = {
               id: info.room, title: info.title || "Live", host: info.host || "Host",
               cat: info.cat || "Chat", viewers: 2, likes: 0, followers: 0,
               color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer"
             };
           });
+          Object.keys(liveFeed).forEach(function(k){ if (!keep[k]) delete liveFeed[k]; });
           renderHome();
         });
         s.on("live started", function(info){
@@ -1069,9 +1142,26 @@
             addChat("Live ended.", "join-msg");
           }
         });
+        // v8: block se mutalliq events
+        s.on("blocked", function(d){
+          toast(d && d.message ? d.message : "You can't join this live.");
+          if (room && d && d.room === currentRoomId) closeRoom();
+        });
+        s.on("you were blocked", function(d){
+          toast(d && d.message ? d.message : "The host removed you from this live.");
+          if (room && d && d.room === currentRoomId) closeRoom();
+        });
+        s.on("user blocked", function(d){
+          if (d && d.target) {
+            Object.keys(watchers).forEach(function(id){ if (watchers[id] === d.target) delete watchers[id]; });
+            renderWatcherList();
+            toast("Blocked " + d.target);
+          }
+        });
         // Host side: koi viewer dekhna chahta hai — us ko offer bhejein
         s.on("watcher", function(d){
           if (!localStream || !myLiveRoomId || !d || d.room !== myLiveRoomId) return;
+          if (d.name) { watchers[d.watcherId] = d.name; renderWatcherList(); } // v8: watcher list
           closePCFor(d.watcherId);
           var pc = new RTCPeerConnection(RTC_CONF);
           hostPCs[d.watcherId] = pc;
@@ -1123,7 +1213,10 @@
           }
         });
         s.on("watcher left", function(d){
-          if (d && d.watcherId) closePCFor(d.watcherId);
+          if (d && d.watcherId) {
+            closePCFor(d.watcherId);
+            if (watchers[d.watcherId]) { delete watchers[d.watcherId]; renderWatcherList(); } // v8
+          }
         });
       }
 
@@ -1154,6 +1247,10 @@
         $("giftTray").classList.remove("open");
         var fb = $("followBtn");
         fb.textContent = "Follow"; fb.classList.remove("following"); fb.style.display = "";
+        // v8: host apne live ke watchers ko Block kar sakta hai
+        watchers = {};
+        renderWatcherList();
+        $("watcherPanel").style.display = room.isHost ? "" : "none";
         $("viewerActions").style.display = room.isHost ? "none" : "flex";
         $("hostActions").style.display = room.isHost ? "flex" : "none";
         $("liveTimer").classList.toggle("show", room.isHost);
@@ -1191,6 +1288,8 @@
         room = null;
         $("roomView").classList.remove("open");
         $("giftTray").classList.remove("open");
+        $("userSheet").classList.remove("open"); // v8
+        $("watcherPanel").style.display = "none"; // v8
       }
       $("closeRoomBtn").addEventListener("click", function(){
         if (room && room.isHost) { endLive(); } else { closeRoom(); }
@@ -1415,6 +1514,7 @@
           if (data && data.ok) {
             currentUser = { name: data.name };
             saveUser(data.name);
+            if (socket) socket.emit("identify", data.name); // v8: server ko naam batayein
             applyUser();
             unlockApp();
             $("authPass").value = "";
@@ -1441,11 +1541,158 @@
         toast("Logged out.");
       });
 
+      /* ================= v8: Report / Block (UI) ================= */
+      var REPORT_REASONS = ["spam", "abuse", "bad content", "fake", "other"];
+      var userMenuTarget = null;
+      function renderReportReasons(){
+        var wrap = $("reportReasons"); if (!wrap) return; wrap.innerHTML = "";
+        REPORT_REASONS.forEach(function(r, i){
+          var lab = document.createElement("label");
+          lab.className = "reason";
+          var inp = document.createElement("input");
+          inp.type = "radio"; inp.name = "reportReason"; inp.value = r;
+          if (i === 0) inp.checked = true;
+          lab.appendChild(inp);
+          lab.appendChild(document.createTextNode(r.charAt(0).toUpperCase() + r.slice(1)));
+          wrap.appendChild(lab);
+        });
+      }
+      function openUserMenu(name){
+        if (!currentUser) { toast("Log in first to block or report."); return; }
+        if (!name || name === myName()) { toast("This is you."); return; }
+        userMenuTarget = name;
+        $("userMenuName").textContent = name;
+        $("userReportName").textContent = name;
+        $("reportText").value = "";
+        $("userMenuView").style.display = "";
+        $("userReportView").style.display = "none";
+        $("userSheet").classList.add("open");
+      }
+      function closeUserSheet(){
+        $("userSheet").classList.remove("open");
+        userMenuTarget = null;
+      }
+      // Chat mein naam par tap — Block / Report menu
+      $("chatBox").addEventListener("click", function(e){
+        var t = e.target && e.target.closest ? e.target.closest(".who-click") : null;
+        if (t && t.getAttribute("data-name")) openUserMenu(t.getAttribute("data-name"));
+      });
+      $("userBlockBtn").addEventListener("click", function(){
+        if (!userMenuTarget) return;
+        var t = userMenuTarget;
+        fetch("/api/block", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), target: t }) })
+        .then(function(r){ return r.json(); }).then(function(d){
+          toast(d && d.ok ? "Blocked " + t : (d && d.error ? d.error : "Couldn't block."));
+          closeUserSheet();
+        }).catch(function(){ toast("Couldn't block — check connection."); closeUserSheet(); });
+      });
+      $("userReportBtn").addEventListener("click", function(){
+        if (!userMenuTarget) return;
+        $("userMenuView").style.display = "none";
+        $("userReportView").style.display = "";
+      });
+      $("reportSendBtn").addEventListener("click", function(){
+        if (!userMenuTarget) return;
+        var t = userMenuTarget;
+        var sel = document.querySelector('input[name="reportReason"]:checked');
+        var reason = sel ? sel.value : "";
+        var text = $("reportText").value.trim();
+        fetch("/api/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), target: t, reason: reason, text: text, room: currentRoomId || "" }) })
+        .then(function(r){ return r.json(); }).then(function(d){
+          toast(d && d.ok ? "Report sent. Thanks!" : (d && d.error ? d.error : "Couldn't send report."));
+          closeUserSheet();
+        }).catch(function(){ toast("Couldn't send report — check connection."); closeUserSheet(); });
+      });
+      $("userMenuCancelBtn").addEventListener("click", closeUserSheet);
+      $("reportCancelBtn").addEventListener("click", closeUserSheet);
+
+      // Host ke live view mein watchers + Block button
+      function renderWatcherList(){
+        var list = $("watcherList"); if (!list) return;
+        list.innerHTML = "";
+        var ids = Object.keys(watchers);
+        if (!ids.length) { list.innerHTML = '<div style="font-size:.8rem;opacity:.75">No viewers yet.</div>'; return; }
+        ids.forEach(function(id){
+          var name = watchers[id];
+          var row = document.createElement("div");
+          row.className = "watcher-row";
+          var nm = document.createElement("span");
+          nm.className = "wname"; nm.textContent = name;
+          var b = document.createElement("button");
+          b.type = "button"; b.className = "watcher-block"; b.textContent = "Block";
+          b.addEventListener("click", function(){
+            var s = connectSocket();
+            if (s && myLiveRoomId) s.emit("block user", { room: myLiveRoomId, target: name });
+            delete watchers[id];
+            renderWatcherList();
+            toast("Blocked " + name);
+          });
+          row.appendChild(nm); row.appendChild(b);
+          list.appendChild(row);
+        });
+      }
+
+      // Blocked users screen
+      function openBlocked(){
+        var list = $("blockedList");
+        list.innerHTML = "<p class='hist-empty'>Loading...</p>";
+        showScreen("blocked");
+        fetch("/api/blocks?name=" + encodeURIComponent(myName())).then(function(r){ return r.json(); }).then(function(d){
+          list.innerHTML = "";
+          var arr = (d && d.blocked) || [];
+          if (!arr.length) { list.innerHTML = "<p class='hist-empty'>No blocked users.</p>"; return; }
+          arr.forEach(function(n){
+            var row = document.createElement("div");
+            row.className = "list-row";
+            var nm = document.createElement("div"); nm.textContent = n;
+            var b = document.createElement("button");
+            b.type = "button"; b.className = "btn-danger"; b.textContent = "Unblock";
+            b.addEventListener("click", function(){
+              fetch("/api/unblock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), target: n }) })
+              .then(function(r){ return r.json(); }).then(function(res){
+                if (res && res.ok) { toast("Unblocked " + n); openBlocked(); }
+                else toast(res && res.error ? res.error : "Couldn't unblock.");
+              }).catch(function(){ toast("Couldn't unblock — check connection."); });
+            });
+            row.appendChild(nm); row.appendChild(b);
+            list.appendChild(row);
+          });
+        }).catch(function(){ list.innerHTML = "<p class='hist-empty'>Couldn't load blocked users.</p>"; });
+      }
+      // Reports screen
+      function openReports(){
+        var list = $("reportsList");
+        list.innerHTML = "<p class='hist-empty'>Loading...</p>";
+        showScreen("reports");
+        fetch("/api/reports").then(function(r){ return r.json(); }).then(function(d){
+          list.innerHTML = "";
+          var arr = (d && d.reports) || [];
+          if (!arr.length) { list.innerHTML = "<p class='hist-empty'>No reports yet.</p>"; return; }
+          arr.forEach(function(rep){
+            var row = document.createElement("div");
+            row.className = "list-row";
+            var when = rep.time ? new Date(rep.time).toLocaleString("en-GB") : "";
+            var txt = esc(rep.by) + " → " + esc(rep.target) + " · " + esc(rep.reason);
+            if (rep.text) txt += "<br><small>" + esc(rep.text) + "</small>";
+            if (rep.room) txt += "<br><small>Room: " + esc(rep.room) + "</small>";
+            txt += "<br><small>" + esc(when) + "</small>";
+            var info = document.createElement("div"); info.innerHTML = txt;
+            row.appendChild(info);
+            list.appendChild(row);
+          });
+        }).catch(function(){ list.innerHTML = "<p class='hist-empty'>Couldn't load reports.</p>"; });
+      }
+      $("blockedBtn").addEventListener("click", openBlocked);
+      $("reportsBtn").addEventListener("click", openReports);
+      $("blockedBackBtn").addEventListener("click", function(){ showScreen("profile"); });
+      $("reportsBackBtn").addEventListener("click", function(){ showScreen("profile"); });
+
       /* ================= Init ================= */
       renderChips();
       renderHome();
       renderGifts();
       renderCovers();
+      renderReportReasons(); // v8
       setCoins(coins);
       currentUser = loadUser();
       if (currentUser) { applyUser(); unlockApp(); showScreen("home"); }
