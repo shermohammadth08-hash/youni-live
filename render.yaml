@@ -1,0 +1,9 @@
+# Render Blueprint — Youni Live (free web service)
+# Is file se Render khud service bana leta hai. Kuch badalne ki zaroorat nahi.
+services:
+  - type: web
+    name: youni-live
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
