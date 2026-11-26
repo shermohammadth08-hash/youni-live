@@ -1,4 +1,4 @@
-// Youni Live — PUBLIC version (Railway free tier) — server + real-time live chat (socket.io) + real Go Live video (WebRTC signalling) + PWA (installable app)
+// Chai Live — PUBLIC version (Railway free tier) — server + real-time live chat (socket.io) + real Go Live video (WebRTC signalling) + PWA (installable app)
 // PUBLIC mode: agar PORT environment variable set hai (Railway khud deta hai),
 // to server sirf usi ek HTTP port par chalta hai — platform khud HTTPS deta hai,
 // is liye certificate ki zaroorat nahi. PORT set nahi hai to local mode:

@@ -1,6 +1,6 @@
-// Youni Live service worker — caches the app shell so the installed app
+// Chai Live service worker — caches the app shell so the installed app
 // loads fast. API calls (/api/*) and socket.io traffic are NEVER cached.
-const CACHE_NAME = "youni-live-v1";
+const CACHE_NAME = "chai-live-v1";
 const SHELL = [
   "/",
   "/index.html",
