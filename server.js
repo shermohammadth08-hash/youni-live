@@ -933,7 +933,7 @@ io.on("connection", (sock) => {
     const host = typeof data.host === "string" ? data.host.slice(0, 30) : "Host";
     const cat = typeof data.cat === "string" ? data.cat.slice(0, 20) : "Chat";
     const cover = typeof data.cover === "string" ? data.cover.slice(0, 30) : "singer";
-    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, multiGuest: data.multiGuest !== false, mode: typeof data.mode === "string" ? data.mode.slice(0, 10) : "video", cameraOn: true }; // v23
+    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, theme: (typeof data.theme === "string" && data.theme.length <= 20) ? data.theme.slice(0, 20) : cover, multiGuest: data.multiGuest !== false, mode: typeof data.mode === "string" ? data.mode.slice(0, 10) : "video", cameraOn: true }; // v23, v26 theme
     if (!sock.data.userName) sock.data.userName = host;
     emitLiveStarted(Object.assign({ room: roomId }, liveRooms[roomId]));
   });
@@ -943,6 +943,15 @@ io.on("connection", (sock) => {
     const roomId = typeof data.room === "string" ? data.room : "";
     if (!isHostOf(sock.id, roomId)) return;
     endLiveRoom(roomId);
+  });
+  sock.on("room theme", (data) => { // v26: host background badle — sab viewers ko batayein
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    if (!isHostOf(sock.id, roomId)) return;
+    const theme = typeof data.theme === "string" ? data.theme.slice(0, 20) : "";
+    if (!theme || !liveRooms[roomId]) return;
+    liveRooms[roomId].theme = theme;
+    io.to(roomId).emit("room theme", { room: roomId, theme: theme });
   });
   sock.on("camera state", (data) => { // v23: host camera on/off — sab viewers ko batayein
     if (!data || typeof data !== "object") return;
