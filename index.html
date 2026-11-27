@@ -512,9 +512,10 @@
       .follow-btn.following { background: rgba(255,255,255,.22); }
       .room-top .spacer { flex: 1; }
       .room-viewers {
-        background: rgba(10,10,16,.55); border-radius: 999px; padding: .4rem .6rem;
-        font-size: .76rem; font-weight: 700; display: inline-flex; gap: .3rem; align-items: center; cursor: pointer;
-      } /* v48: eye icon tappable — tap par viewers list khule */
+        background: rgba(10,10,16,.55); border: none; border-radius: 999px; padding: .4rem .6rem;
+        font: inherit; font-size: .76rem; font-weight: 700; color: inherit; display: inline-flex; gap: .3rem; align-items: center; cursor: pointer;
+      } /* v50: asli <button> — har browser/device par click chale */
+      .room-viewers:active { background: rgba(255,255,255,.25); }
       .room-viewers svg { width: 13px; height: 13px; }
       .close-btn {
         width: 2.4rem; height: 2.4rem; border-radius: 50%; border: none; cursor: pointer;
@@ -1055,9 +1056,9 @@
           </div>
           <button class="follow-btn" id="followBtn" type="button">Follow</button>
           <div class="spacer"></div>
-          <span class="room-viewers" id="viewerEyeBtn" role="button" aria-label="Viewers" title="Viewers">
+          <button type="button" class="room-viewers" id="viewerEyeBtn" aria-label="Viewers" title="Viewers">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5c5 0 9.3 3 11 7-1.7 4-6 7-11 7S2.7 16 1 12c1.7-4 6-7 11-7zm0 2C8.2 7 4.8 9 3.2 12 4.8 15 8.2 17 12 17s7.2-2 8.8-5C19.2 9 15.8 7 12 7zm0 1.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/></svg>
-            <span id="roomViewerCount">0</span>
+            <span id="roomViewerCount">0</button>
           </span>
           <button class="close-btn" id="closeRoomBtn" type="button" aria-label="Close room">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 5l14 14M19 5L5 19"/></svg>
@@ -3024,7 +3025,9 @@
       $("musicTrayX").addEventListener("click", function(){ $("musicTray").classList.remove("open"); }); // v30
       $("pkTrayX").addEventListener("click", function(){ $("pkTray").classList.remove("open"); }); // v30
       $("giftTrayX").addEventListener("click", function(){ $("giftTray").classList.remove("open"); }); // v30
-      $("viewerEyeBtn").addEventListener("click", function(){ renderWatcherList(); $("viewersTray").classList.add("open"); }); // v48: eye icon par tap — viewers list khule
+      function openViewersTray(){ $("viewersTray").classList.add("open"); try { renderWatcherList(); } catch(e){} } // v50: tray pehle khule, list baad mein — render fail ho bhi to tray khule
+      $("viewerEyeBtn").addEventListener("click", openViewersTray); // v50: asli <button>, click par tray khule
+      $("viewerEyeBtn").addEventListener("touchstart", function(e){ e.preventDefault(); openViewersTray(); }, {passive:false}); // v50: mobile touch par bhi tray khule
       $("viewersTrayX").addEventListener("click", function(){ $("viewersTray").classList.remove("open"); });
       $("musicBtn").addEventListener("click", function(){ renderMusicGrid(); $("musicTray").classList.toggle("open"); }); // v24
       $("stopMusicBtn").addEventListener("click", function(){ stopMusic(); $("musicTray").classList.remove("open"); }); // v24
