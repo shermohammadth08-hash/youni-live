@@ -822,11 +822,11 @@ function roomHiddenFor(viewerName, hostName){
   return hasBlocked(viewerName, hostName) || hasBlocked(hostName, viewerName);
 }
 
-function roomViewerCount(roomId){ // v29: asli viewers — host ko ginay baghair
+function roomViewerCount(roomId){ // v45: sirf naam wale viewers ginain — eye aur "Viewers in your live" list hamesha barabar
   const live = liveRooms[roomId]; if (!live) return 0;
   let n = 0;
   for (const [, s] of io.sockets.sockets) {
-    if (s.rooms.has(roomId) && s.id !== live.hostId) n++;
+    if (s.rooms.has(roomId) && s.id !== live.hostId && s.data && s.data.userName) n++;
   }
   return n;
 }
@@ -1327,6 +1327,7 @@ io.on("connection", (sock) => {
     // v8: watcher ka naam bhi host ko bhejein — host apne live view mein
     // watcher ke naam ke saath Block button dekhega.
     const wname = cleanName(data.name) || (sock.data && sock.data.userName) || "";
+    if (wname && !(sock.data && sock.data.userName)) { sock.data.userName = wname; broadcastViewers(roomId); } // v45: bina-naam viewer ka naam watch se le lein — list mein aaye
     io.to(liveRooms[roomId].hostId).emit("watcher", { watcherId: sock.id, room: roomId, name: wname });
     if (wname && sock.data.welcomedRoom !== roomId) { // v32: Bigo jaisa entry welcome — sab ko dikhe
       sock.data.welcomedRoom = roomId;

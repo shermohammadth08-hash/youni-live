@@ -394,17 +394,17 @@
       #roomView.audio-mode .room-title-bar { order: 2; }
       #roomView.audio-mode .viewer-live-badge { order: 3; }
       #roomView.audio-mode .live-timer { order: 4; }
-      #roomView.audio-mode #audioHostCircle { position: static; transform: none; order: 5; margin: .4rem auto 0; }
-      #roomView.audio-mode #guestTiles { position: static; order: 6; margin: .7rem 10px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      #roomView.audio-mode #audioHostCircle { position: static; transform: none; order: 5; margin: .25rem auto 0; }
+      #roomView.audio-mode #guestTiles { position: static; order: 6; margin: .4rem 10px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
       #roomView.audio-mode .room-bottom { order: 7; }
       /* v38: audio room ka sahi layout — beech wala hissa (seats) apni jagah scroll ho, neeche wala hissa (panel + chat + buttons) us ke neeche fixed rahe, kuch bhi kisi ke upar na aaye */
       #roomScroll { display: contents; } /* v38: baaki modes mein wrapper ghayab — pehle jaisa hi layout */
       #roomView.audio-mode #roomScroll { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
-      #roomView.audio-mode .room-bottom { position: relative; flex-shrink: 0; display: flex; flex-direction: column; max-height: 46dvh; } /* v44: neeche wala hissa bandha hua — seats kabhi nahi chhupengi, chat andar scroll hogi */
+      #roomView.audio-mode .room-bottom { position: relative; flex-shrink: 0; display: flex; flex-direction: column; max-height: 38dvh; } /* v45: neeche wala hissa chhota — upar seats ko 62dvh mile, dono rows dikhein */ /* v44: neeche wala hissa bandha hua — seats kabhi nahi chhupengi, chat andar scroll hogi */
       #roomView.audio-mode .chat { flex: 0 1 auto; min-height: 0; } /* v44: chat dabao — jagah kam ho to chat chhoti hogi, seats ko jagah milegi */
-      #roomView.audio-mode .watcher-panel, #roomView.audio-mode #hostChatRow, #roomView.audio-mode #hostActions, #roomView.audio-mode #viewerActions { flex-shrink: 0; }
-      #roomView.audio-mode .chat { max-height: 26dvh; mask-image: none; -webkit-mask-image: none; } /* v41: chat thodi unchi + upar wala fade hata diya — line aadhi/kati hui na dikhe */
-      #roomView.audio-mode .watcher-panel { max-height: 10dvh; overflow-y: auto; } /* v42: viewers panel chhota — chat bharne par seats kabhi chhupen gi nahi */
+      #roomView.audio-mode .watcher-panel, #roomView.audio-mode #hostActions, #roomView.audio-mode #viewerActions { flex-shrink: 0; }
+      #roomView.audio-mode .chat { max-height: 18dvh; mask-image: none; -webkit-mask-image: none; } /* v45: chat thodi chhoti — seats ko jagah mile */ /* v41: chat thodi unchi + upar wala fade hata diya — line aadhi/kati hui na dikhe */
+      #roomView.audio-mode .watcher-panel { max-height: 8dvh; overflow-y: auto; } /* v45: panel thoda chhota */ /* v42: viewers panel chhota — chat bharne par seats kabhi chhupen gi nahi */
       #pkVideo { display: none; position: absolute; top: 170px; right: 10px; width: calc(50% - 14px); height: 38%; border-radius: 16px; object-fit: cover; background: #000; z-index: 4; }
       #pkVideo.show { display: block; }
       #roomView.pk-mode .room-video.show { top: 170px; left: 10px; right: auto; bottom: auto; width: calc(50% - 14px); height: 38%; border-radius: 16px; }
@@ -453,7 +453,7 @@
       .guest-tile .geq i { width: 3px; background: #c084fc; border-radius: 2px; height: 2px; } /* v38: asli awaz se chalenge (JS) — naqli CSS animation khatam, khamoshi mein flat */
       #audioHostCircle { display: none; position: absolute; left: 50%; top: 96px; transform: translateX(-50%); z-index: 5; text-align: center; }
       #audioHostCircle.show { display: block; }
-      #audioHostCircle .ah-av { width: 5.5rem; height: 5.5rem; border-radius: 50%; border: 3px solid #c084fc; box-shadow: 0 0 0 4px rgba(192,132,252,.35), 0 0 24px rgba(192,132,252,.8); overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; font-weight: 800; color: #fff; background: #7a4fd0; margin: 0 auto; }
+      #audioHostCircle .ah-av { width: 5.5rem; height: 5.5rem; border-radius: 50%; border: 3px solid #c084fc; box-shadow: 0 0 0 4px rgba(192,132,252,.35), 0 0 24px rgba(192,132,252,.8); overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; font-weight: 800; color: #fff; background: #7a4fd0; margin: 0 auto; } #roomView.audio-mode #audioHostCircle .ah-av { width: 4rem; height: 4rem; } /* v45: audio room mein host circle chhota — dono seat rows dikhein */
       #audioHostCircle .ah-av img { width: 100%; height: 100%; object-fit: cover; }
       #audioHostCircle .ah-name { margin-top: .4rem; color: #fff; font-weight: 800; font-size: .95rem; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
       #audioHostCircle .ah-live { color: #f0abfc; font-size: .75rem; font-weight: 700; }
@@ -571,9 +571,10 @@
       }
       .btn-end {
         border: none; background: var(--brand); color: #fff; font-weight: 800; cursor: pointer;
-        border-radius: 999px; padding: .7rem 1.1rem; min-height: 2.75rem; font-size: .9rem;
-      }
-      .btn-cam { border: 1px solid rgba(255,255,255,.4); background: rgba(255,255,255,.16); color: #fff; font-weight: 800; cursor: pointer; border-radius: 999px; padding: .7rem 1rem; min-height: 2.75rem; font-size: .85rem; }
+        border-radius: 999px; padding: .45rem .75rem; min-height: 2.05rem; font-size: .78rem;
+      } /* v45: End Live button chhota */
+      #hostActions { gap: .35rem; } /* v45: host buttons qareeb — jagah bache */
+      /* v45: Theme/Music/PK/Camera buttons chhote */ .btn-cam { border: 1px solid rgba(255,255,255,.4); background: rgba(255,255,255,.16); color: #fff; font-weight: 800; cursor: pointer; border-radius: 999px; padding: .45rem .65rem; min-height: 2.05rem; font-size: .72rem; }
       .btn-cam.off { background: var(--brand); border-color: var(--brand); }
 
       /* hearts */
@@ -1094,14 +1095,9 @@
               </button>
             </div>
           </div>
-          <div class="room-actions" id="hostChatRow" style="display:none">
-            <form class="chat-input" id="chatFormHost">
-              <input type="text" id="chatTextHost" placeholder="Type a message..." maxlength="120" autocomplete="off" />
-              <button type="submit">Send</button>
-            </form>
-          </div>
+          
           <div class="room-actions" id="hostActions" style="display:none">
-            <p style="margin:0;font-size:.82rem;opacity:.9;flex:1">You're live — viewers are joining!</p>
+            <p style="margin:0;font-size:.72rem;opacity:.9;flex:1">You're live — viewers are joining!</p>
             <button class="btn-cam" id="pkBtn" type="button">PK</button>
             <button class="btn-cam" id="themeBtn" type="button">Theme</button>
             <button class="btn-cam" id="musicBtn" type="button">Music</button>
@@ -2637,10 +2633,11 @@
         watchers = {};
         renderWatcherList();
         $("watcherPanel").style.display = room.isHost ? "" : "none";
-        $("viewerActions").style.display = room.isHost ? "none" : "flex";
+        $("viewerActions").style.display = "flex"; // v45: host bhi wahi chat row use kare jo guest karta hai — ek hi pill, ek hi Send, ek hi jagah
         $("hostActions").style.display = room.isHost ? "flex" : "none";
-        $("hostChatRow").style.display = room.isHost ? "flex" : "none"; // v43: host bhi neeche type kar sake — guest wali jagah par hi
-        $("liveTimer").classList.toggle("show", room.isHost);
+        $("guestBtn").style.display = room.isHost ? "none" : ""; // v45: host ke liye Join-as-guest nahi
+        $("giftBtn").style.display = room.isHost ? "none" : ""; // v45: host khud ko gift nahi bhejta
+        $("soundBtn").style.display = room.isHost ? "none" : ""; // v45: host ki apni preview ki awaz band hi rehti hai (echo na ho)        $("liveTimer").classList.toggle("show", room.isHost);
         $("roomView").classList.add("open");
         setCoins(coins);
         viewerStreams = []; roomSeats = []; guestRequests = []; // v20: naye room ke liye saaf
@@ -2731,20 +2728,7 @@
         }
       });
       // v43: host ka apna chat form — guest wali jagah par hi type kare, wahi tareeqa
-      $("chatFormHost").addEventListener("submit", function(e){
-        e.preventDefault();
-        var v = $("chatTextHost").value.trim();
-        if (!v || !room) return;
-        if (v.length > 200) v = v.slice(0, 200);
-        $("chatTextHost").value = "";
-        var s = connectSocket();
-        var online = window.location.protocol !== "file:";
-        if (s && online && currentRoomId) {
-          s.emit("chat message", { room: currentRoomId, name: myName(), text: v });
-        } else {
-          addChat('<span class="who" style="color:#ffd166">You</span>' + esc(v), "mine");
-        }
-      });
+      
 
       /* ================= Gifts ================= */
       function renderGifts(){
