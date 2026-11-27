@@ -2118,6 +2118,7 @@
           });
           Object.keys(liveFeed).forEach(function(k){ if (!keep[k]) delete liveFeed[k]; });
           renderHome();
+          if (room && !room.isHost && room.data && room.data.id && !liveFeed[room.data.id]) { closeRoom(); toast("Live ended."); } // v39: live list mein room nahi — live khatam ("live ended" miss hone ka backup)
         });
         s.on("live started", function(info){
           if (!info || !info.room) return;
@@ -2137,9 +2138,8 @@
           delete liveFeed[d.room];
           renderHome();
           if (room && !room.isHost && currentRoomId === d.room) {
-            cleanupGuestState(); // v20: guest tha to seat/camera band
-            closeViewerPC();
-            addChat("Live ended.", "join-msg");
+            closeRoom(); // v39: host ne live band ki — guest ka room bhi band ho (pehle sirf video band hoti thi, room khula rehta tha)
+            toast("Live ended.");
           }
         });
         s.on("room theme", function(d){ // v26: host ne background badla
