@@ -388,6 +388,16 @@
       .guest-tile { flex: 1; max-width: 112px; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: #111; border: 2px solid rgba(255,255,255,.4); position: relative; display: none; }
       .guest-tile.on { display: block; }
       .guest-tile.empty { display: block; background: rgba(255,255,255,.08); border: 2px dashed rgba(255,255,255,.35); }
+      .mode-tabs { display: flex; gap: 8px; margin: .2rem 0 .9rem; }
+      .mode-tab { flex: 1; padding: .65rem .2rem; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 800; font-size: .78rem; cursor: pointer; }
+      .mode-tab.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+      .seat-preview { display: flex; gap: 8px; margin: .2rem 0 .9rem; }
+      .seat-ph { flex: 1; aspect-ratio: 3/4; max-width: 84px; border-radius: 12px; border: 2px dashed rgba(255,255,255,.35); background: rgba(255,255,255,.06); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--ink-soft); font-size: .68rem; font-weight: 700; }
+      .seat-ph b { font-size: 1.25rem; font-weight: 800; color: var(--ink); }
+      .guest-tile.audio video { display: none; }
+      .guest-tile .gavatar { display: none; }
+      .guest-tile.audio .gavatar { display: flex; position: absolute; inset: 0; align-items: center; justify-content: center; font-size: 1.7rem; font-weight: 800; color: #fff; }
+      .guest-tile.audio { background: linear-gradient(135deg, #3a2b5c, #1c1a2e); }
       .guest-tile video { width: 100%; height: 100%; object-fit: cover; }
       .guest-tile .gname { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font-size: .62rem; font-weight: 700; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .guest-tile .gkick { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: .75rem; line-height: 1; cursor: pointer; pointer-events: auto; }
@@ -480,6 +490,8 @@
         border: none; background: var(--brand); color: #fff; font-weight: 800; cursor: pointer;
         border-radius: 999px; padding: .7rem 1.1rem; min-height: 2.75rem; font-size: .9rem;
       }
+      .btn-cam { border: 1px solid rgba(255,255,255,.4); background: rgba(255,255,255,.16); color: #fff; font-weight: 800; cursor: pointer; border-radius: 999px; padding: .7rem 1rem; min-height: 2.75rem; font-size: .85rem; }
+      .btn-cam.off { background: var(--brand); border-color: var(--brand); }
 
       /* hearts */
       .hearts { position: absolute; right: .4rem; bottom: 6.5rem; width: 3.2rem; height: 45%; z-index: 2; pointer-events: none; }
@@ -645,6 +657,17 @@
           <div class="golive-wrap">
             <h2>Start Your Live</h2>
             <p class="sub">Write a title, choose a cover and go live — just like Bigo Live. Viewers and chat in the demo are samples.</p>
+            <div class="mode-tabs" id="modeTabs">
+              <button type="button" class="mode-tab on" data-mode="multi">Multi-guest LIVE</button>
+              <button type="button" class="mode-tab" data-mode="video">LIVE</button>
+              <button type="button" class="mode-tab" data-mode="audio">Audio LIVE</button>
+            </div>
+            <div class="seat-preview" id="seatPreview">
+              <div class="seat-ph"><b>+</b>Guest seat</div>
+              <div class="seat-ph"><b>+</b>Guest seat</div>
+              <div class="seat-ph"><b>+</b>Guest seat</div>
+              <div class="seat-ph"><b>+</b>Guest seat</div>
+            </div>
             <div class="field">
               <label for="liveTitle">Live title</label>
               <input type="text" id="liveTitle" maxlength="60" placeholder="E.g.: Tonight is for you" />
@@ -662,10 +685,6 @@
             <div class="field">
               <label>Choose a cover photo</label>
               <div class="covers" id="coverPick"></div>
-            </div>
-            <div class="priv-row">
-              <div class="txt"><h3>Multi-guest live</h3><p>Up to 4 guests can join your live on video. Viewers tap "Join as guest" and you approve them.</p></div>
-              <label class="switch"><input type="checkbox" id="multiGuestBtn" checked><span class="slider"></span></label>
             </div>
             <button class="btn-live" id="startLiveBtn" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="M15 10.5l7-3.5v10l-7-3.5" fill="currentColor" stroke="none"/></svg>
@@ -976,6 +995,7 @@
           </div>
           <div class="room-actions" id="hostActions" style="display:none">
             <p style="margin:0;font-size:.82rem;opacity:.9;flex:1">You're live — viewers are joining!</p>
+            <button class="btn-cam" id="camToggleBtn" type="button">Camera Off</button>
             <button class="btn-end" id="endLiveBtn" type="button">End Live</button>
           </div>
         </div>
@@ -1198,7 +1218,7 @@
             '<span class="live-badge">LIVE</span>' +
             '<span class="viewers">' + eyeSVG() + fmt(r.viewers) + '</span>' +
             '<span class="shade"></span>' +
-            '<span class="meta"><p class="t">' + r.title + '</p><p class="h">' + r.host + ' · ' + r.cat + '</p></span>';
+            '<span class="meta"><p class="t">' + r.title + '</p><p class="h">' + r.host + ' · ' + r.cat + (r.mode === 'audio' ? ' · Audio' : r.mode === 'multi' ? ' · Multi-guest' : '') + '</p></span>';
         } else {
           el.innerHTML =
             '<span class="thumb"><img src="' + IMG[r.img] + '" alt="' + r.host + '\'s live room" loading="lazy" />' +
@@ -1206,7 +1226,7 @@
             '<span class="viewers">' + eyeSVG() + fmt(r.viewers) + '</span></span>' +
             '<span class="info"><p class="title">' + r.title + '</p>' +
             '<span class="host-row"><span class="avatar" style="background:' + r.color + '">' + r.host.charAt(0) + '</span>' +
-            '<span class="name">' + r.host + '</span><span class="cat-tag">' + r.cat + '</span></span></span>';
+            '<span class="name">' + r.host + '</span><span class="cat-tag">' + r.cat + '</span>' + (r.mode === 'audio' ? '<span class="cat-tag">Audio</span>' : r.mode === 'multi' ? '<span class="cat-tag">Multi-guest</span>' : '') + '</span></span>';
         }
         el.addEventListener("click", function(){ openRoom(r); });
         return el;
@@ -1394,6 +1414,10 @@
         else if (q === "medium") { video.width = { ideal: 640 }; video.height = { ideal: 480 }; }
         return navigator.mediaDevices.getUserMedia({ video: video, audio: true });
       }
+      function startMic(){ // v23: Audio LIVE — sirf mic, camera nahi
+        if (!camAvailable()) return Promise.reject(new Error("nocam"));
+        return navigator.mediaDevices.getUserMedia({ audio: true });
+      }
       function stopCamera(){
         if (localStream) { localStream.getTracks().forEach(function(t){ t.stop(); }); localStream = null; }
       }
@@ -1422,6 +1446,33 @@
           v.play().catch(function(){});
         });
       }
+      function showAudioHost(){ // v23: audio room — cover background + LIVE badge, video nahi
+        $("viewerLiveBadge").classList.add("show");
+      }
+      var hostCamOn = true; // v23: host ka camera on/off (LIVE + Multi-guest LIVE)
+      var roomCamOff = false; // v23: is room mein host ka camera off hai (viewer side)
+      function showHostAvatarView(){ // camera off — cover + avatar, LIVE badge rehta hai
+        var v = $("roomVideo");
+        v.classList.remove("show");
+        v.srcObject = null;
+        $("roomBg").style.display = "";
+      }
+      function renderCamBtn(){
+        var b = $("camToggleBtn"); if (!b) return;
+        b.style.display = (room && room.isHost && room.data && room.data.mode !== 'audio') ? "" : "none";
+        b.textContent = hostCamOn ? "Camera Off" : "Camera On";
+        b.classList.toggle("off", !hostCamOn);
+      }
+      function setHostCam(on){
+        hostCamOn = on;
+        if (localStream) localStream.getVideoTracks().forEach(function(t){ t.enabled = on; });
+        if (room && room.isHost) {
+          if (on) { if (localStream) showRoomVideo(localStream, true); }
+          else showHostAvatarView();
+        }
+        renderCamBtn();
+        if (socket && myLiveRoomId) socket.emit("camera state", { room: myLiveRoomId, on: on });
+      }
       function hideRoomVideo(){
         var v = $("roomVideo");
         v.classList.remove("show");
@@ -1445,7 +1496,7 @@
         while (wrap.children.length < 4) {
           var t = document.createElement("div");
           t.className = "guest-tile";
-          t.innerHTML = '<video autoplay playsinline muted></video><span class="gname"></span><button type="button" class="gkick" aria-label="Remove guest">\u00d7</button>';
+          t.innerHTML = '<video autoplay playsinline muted></video><span class="gavatar"></span><span class="gname"></span><button type="button" class="gkick" aria-label="Remove guest">\u00d7</button>';
           wrap.appendChild(t);
         }
         var ordered = seatsSorted();
@@ -1455,8 +1506,12 @@
           var vid = tile.querySelector("video");
           var nm = tile.querySelector(".gname");
           var kick = tile.querySelector(".gkick");
-          if (!seat) { tile.classList.remove("on"); if (vid.srcObject) vid.srcObject = null; kick.style.display = "none"; if (room && room.isHost) { tile.classList.add("empty"); nm.textContent = "Empty seat"; } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
+          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; kick.style.display = "none"; if (room && room.isHost) { tile.classList.add("empty"); nm.textContent = "Empty seat"; } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
           tile.classList.add("on"); tile.classList.remove("empty");
+          var av = tile.querySelector(".gavatar");
+          var hasVideo = stream && stream.getVideoTracks().length > 0;
+          tile.classList.toggle("audio", !hasVideo);
+          if (av) av.textContent = hasVideo ? "" : (seat.name || "G").charAt(0);
           nm.textContent = seat.name || "Guest";
           var stream = guestStreamFor(seat, i);
           if (stream && vid.srcObject !== stream) { vid.srcObject = stream; vid.play().catch(function(){}); }
@@ -1557,7 +1612,7 @@
               id: info.room, title: info.title || "Live", host: info.host || "Host",
               cat: info.cat || "Chat", viewers: 2, likes: 0, followers: 0,
               color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer",
-              multiGuest: info.multiGuest !== false
+              multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
             };
           });
           Object.keys(liveFeed).forEach(function(k){ if (!keep[k]) delete liveFeed[k]; });
@@ -1569,7 +1624,7 @@
             id: info.room, title: info.title || "Live", host: info.host || "Host",
             cat: info.cat || "Chat", viewers: 2, likes: 0, followers: 0,
             color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer",
-            multiGuest: info.multiGuest !== false
+            multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
           };
           renderHome();
           if (room && room.isHost && info.room === myLiveRoomId && !liveConfirmed) { liveConfirmed = true; if (liveConfirmTimer) { clearTimeout(liveConfirmTimer); liveConfirmTimer = null; } toast("Congrats! You're live"); }
@@ -1584,6 +1639,12 @@
             closeViewerPC();
             addChat("Live ended.", "join-msg");
           }
+        });
+        s.on("camera state", function(d){ // v23: host ne camera on/off kiya
+          if (!d || !d.room || d.room !== currentRoomId || !room || room.isHost) return;
+          roomCamOff = !d.on;
+          if (d.on) { if (viewerStreams[0]) showRoomVideo(viewerStreams[0], false); }
+          else showHostAvatarView();
         });
         // v8: block se mutalliq events
         s.on("blocked", function(d){
@@ -1652,7 +1713,7 @@
                 };
               });
             }
-            if (viewerStreams[0] === stream) showRoomVideo(stream, false); // host = pehli stream
+            if (viewerStreams[0] === stream) { if (roomCamOff) showHostAvatarView(); else if (stream.getVideoTracks().length > 0) showRoomVideo(stream, false); else showAudioHost(); } // host = pehli stream
             else renderGuestTiles(); // v20: guest ki stream
           };
           pc.onicecandidate = function(e){
@@ -1767,7 +1828,7 @@
           guestRequested = false;
           renderGuestBtn();
           renderGuestTiles();
-          startCamera().then(function(stream){
+          (room && room.data && room.data.mode === 'audio' ? startMic() : startCamera()).then(function(stream){
             guestStream = stream;
             renderGuestTiles(); // apni video apni tile mein
             var pc = new RTCPeerConnection(RTC_CONF);
@@ -1864,6 +1925,7 @@
           data: r, isHost: false, viewers: r.viewers, likes: r.likes,
           following: false, gifts: 0, giftValue: 0, elapsed: 0
         };
+        roomCamOff = (r.cameraOn === false); // v23: late joiner — camera pehle se off hai to avatar dikhe
         setupRoomUI(r.title, r.host, r.color, r.followers, IMG[r.img], r.host + "'s live stream");
         /* v13: asli live mein host ke asli followers + Follow haalat dikhayein. */
         if (r.id && r.id.indexOf("live-") === 0 && currentUser && window.location.protocol !== "file:") {
@@ -1907,6 +1969,7 @@
         setCoins(coins);
         viewerStreams = []; roomSeats = []; guestRequests = []; // v20: naye room ke liye saaf
         renderGuestBtn(); renderGuestRequests(); renderGuestTiles(); // v20
+        if (room.isHost) { hostCamOn = true; } renderCamBtn(); // v23
       }
       function startRoomLoops(pool, hostMode){
         clearTimers();
@@ -2085,8 +2148,14 @@
           n.textContent = "You're on the live app — the camera works directly here. Tap Go Live and allow camera access when your phone asks.";
         }
       })();
-      var multiGuestOn = true; // v22: Go Live screen ka Multi-guest switch
-      $("multiGuestBtn").addEventListener("change", function(){ multiGuestOn = this.checked; });
+      var liveMode = 'multi'; // v23: Bigo-style Go Live modes — multi / video / audio
+      document.querySelectorAll("#modeTabs .mode-tab").forEach(function(b){
+        b.addEventListener("click", function(){
+          liveMode = b.getAttribute("data-mode");
+          document.querySelectorAll("#modeTabs .mode-tab").forEach(function(x){ x.classList.toggle("on", x === b); });
+          $("seatPreview").style.display = (liveMode === 'video') ? "none" : "flex";
+        });
+      });
       $("startLiveBtn").addEventListener("click", function(){
         var title = $("liveTitle").value.trim() || "My first live — hello everyone!";
         var cat = $("liveCat").value;
@@ -2094,23 +2163,23 @@
         if (camErr) camErr.style.display = "none";
         var btn = $("startLiveBtn");
         btn.disabled = true;
-        // Pehle camera + mic — yehi asli live video hai
-        startCamera().then(function(stream){
+        // Pehle camera + mic — audio mode mein sirf mic
+        (liveMode === 'audio' ? startMic() : startCamera()).then(function(stream){
           btn.disabled = false;
           localStream = stream;
           var liveRoomId = "live-" + myName().toLowerCase().replace(/[^a-z0-9]/g, "");
           myLiveRoomId = liveRoomId;
           room = {
-            data: { title: title, host: myName(), cat: cat, multiGuest: multiGuestOn },
+            data: { title: title, host: myName(), cat: cat, mode: liveMode, multiGuest: liveMode !== 'video' },
             isHost: true, viewers: 2, likes: 0, following: true,
             gifts: 0, giftValue: 0, elapsed: 0
           };
           setupRoomUI(title, myName(), "#7a4fd0", fmtFull(myFollowersCount), IMG[chosenCover], "Your live stream cover");
-          showRoomVideo(stream, true); // apni preview (muted — awaz wapas na aaye)
+          if (liveMode === 'audio') showAudioHost(); else showRoomVideo(stream, true); // apni preview (muted — awaz wapas na aaye)
           joinChatRoom(liveRoomId);
           var s = connectSocket();
           if (s && window.location.protocol !== "file:") {
-            s.emit("go live", { room: liveRoomId, title: title, host: myName(), cat: cat, cover: chosenCover, multiGuest: multiGuestOn });
+            s.emit("go live", { room: liveRoomId, title: title, host: myName(), cat: cat, cover: chosenCover, mode: liveMode, multiGuest: liveMode !== 'video' });
           }
           $("followBtn").style.display = "none";
           $("roomViewerCount").textContent = "2";
@@ -2121,7 +2190,7 @@
           liveConfirmTimer = setTimeout(function(){
             if (liveConfirmed || !myLiveRoomId) return;
             var s2 = connectSocket();
-            if (s2) { s2.emit("join room", myLiveRoomId); s2.emit("go live", { room: myLiveRoomId, title: title, host: myName(), cat: cat, cover: chosenCover, multiGuest: multiGuestOn }); }
+            if (s2) { s2.emit("join room", myLiveRoomId); s2.emit("go live", { room: myLiveRoomId, title: title, host: myName(), cat: cat, cover: chosenCover, mode: liveMode, multiGuest: liveMode !== 'video' }); }
             toast("Live start nahi hua — dobara try kar raha hoon…");
             liveConfirmTimer = setTimeout(function(){
               if (liveConfirmed || !myLiveRoomId) return;
@@ -2150,6 +2219,7 @@
         stopCamera();
         hideRoomVideo();
         myLiveRoomId = null;
+        hostCamOn = true; roomCamOff = false; // v23
         liveConfirmed = false;
         if (liveConfirmTimer) { clearTimeout(liveConfirmTimer); liveConfirmTimer = null; }
         /* v14: live khatam — host ko +20 XP (server par). */
@@ -2172,6 +2242,7 @@
         renderHistory();
       }
       $("endLiveBtn").addEventListener("click", endLive);
+      $("camToggleBtn").addEventListener("click", function(){ if (room && room.isHost) setHostCam(!hostCamOn); }); // v23
       $("guestBtn").addEventListener("click", function(){ // v20
         if (myGuestSeat) leaveGuest(); else requestGuest();
       });
