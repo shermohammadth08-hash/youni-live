@@ -749,8 +749,11 @@ function avatarFor(name){ // v24: user ki profile photo ka URL
     return (key && users[key].avatar) || "";
   } catch (e) { return ""; }
 }
+function seatCount(roomId){ // v25: audio room mein 8 seats, baaki mein 4
+  return (liveRooms[roomId] && liveRooms[roomId].mode === 'audio') ? 8 : 4;
+}
 function seatsFor(roomId){
-  if (!guestSeats[roomId]) guestSeats[roomId] = [null, null, null, null];
+  if (!guestSeats[roomId]) guestSeats[roomId] = new Array(seatCount(roomId)).fill(null);
   return guestSeats[roomId];
 }
 function seatsPayload(roomId){

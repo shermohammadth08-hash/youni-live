@@ -398,6 +398,27 @@
       .guest-tile .gavatar { display: none; }
       .guest-tile.audio .gavatar { display: flex; position: absolute; inset: 0; align-items: center; justify-content: center; font-size: 1.7rem; font-weight: 800; color: #fff; }
       .guest-tile.audio { background: linear-gradient(135deg, #3a2b5c, #1c1a2e); }
+      /* v25: Audio LIVE room — Bigo style: 8 armchair seats, 2 rows */
+      .guest-tiles.audio-mode { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; top: 228px; }
+      .guest-tiles.audio-mode .guest-tile { max-width: none; aspect-ratio: 1 / 1; }
+      .guest-tiles.audio-mode .guest-tile.empty { pointer-events: auto; cursor: pointer; }
+      .guest-tile .seat-chair { display: none; }
+      .guest-tiles.audio-mode .guest-tile.empty .seat-chair { display: flex; position: absolute; inset: 0; flex-direction: column; align-items: center; justify-content: center; color: rgba(255,255,255,.75); gap: 2px; }
+      .guest-tiles.audio-mode .guest-tile.empty .seat-chair svg { width: 2rem; height: 2rem; }
+      .guest-tiles.audio-mode .guest-tile.empty .seat-chair b { font-size: 1.1rem; line-height: 1; }
+      .guest-tile .geq { display: none; position: absolute; right: 6px; bottom: 5px; }
+      .guest-tile.audio .geq { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; }
+      .guest-tile .geq i { width: 3px; background: #c084fc; border-radius: 2px; animation: eqb 1s ease-in-out infinite; }
+      .guest-tile .geq i:nth-child(1){ height: 6px; } .guest-tile .geq i:nth-child(2){ height: 12px; animation-delay: .2s; } .guest-tile .geq i:nth-child(3){ height: 8px; animation-delay: .4s; }
+      @keyframes eqb { 0%,100% { transform: scaleY(.5); } 50% { transform: scaleY(1); } }
+      #audioHostCircle { display: none; position: absolute; left: 50%; top: 96px; transform: translateX(-50%); z-index: 5; text-align: center; }
+      #audioHostCircle.show { display: block; }
+      #audioHostCircle .ah-av { width: 5.5rem; height: 5.5rem; border-radius: 50%; border: 3px solid #c084fc; box-shadow: 0 0 0 4px rgba(192,132,252,.35), 0 0 24px rgba(192,132,252,.8); overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; font-weight: 800; color: #fff; background: #7a4fd0; margin: 0 auto; }
+      #audioHostCircle .ah-av img { width: 100%; height: 100%; object-fit: cover; }
+      #audioHostCircle .ah-name { margin-top: .4rem; color: #fff; font-weight: 800; font-size: .95rem; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+      #audioHostCircle .ah-live { color: #f0abfc; font-size: .75rem; font-weight: 700; }
+      .seat-preview.audio { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+      .seat-preview.audio .seat-ph { font-size: .68rem; padding: .35rem 0; }
       .round-btn.off { opacity: .45; }
       .guest-tile video { width: 100%; height: 100%; object-fit: cover; }
       .guest-tile .gname { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font-size: .62rem; font-weight: 700; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -669,12 +690,7 @@
               <button type="button" class="mode-tab" data-mode="video">LIVE</button>
               <button type="button" class="mode-tab" data-mode="audio">Audio LIVE</button>
             </div>
-            <div class="seat-preview" id="seatPreview">
-              <div class="seat-ph"><b>+</b>Guest seat</div>
-              <div class="seat-ph"><b>+</b>Guest seat</div>
-              <div class="seat-ph"><b>+</b>Guest seat</div>
-              <div class="seat-ph"><b>+</b>Guest seat</div>
-            </div>
+            <div class="seat-preview" id="seatPreview"></div>
             <div class="field">
               <label for="liveTitle">Live title</label>
               <input type="text" id="liveTitle" maxlength="60" placeholder="E.g.: Tonight is for you" />
@@ -947,6 +963,7 @@
         <img class="bg-img" id="roomBg" alt="" />
         <video class="room-video" id="roomVideo" autoplay playsinline muted></video>
         <div class="guest-tiles" id="guestTiles"></div>
+        <div id="audioHostCircle"><div class="ah-av" id="audioHostAv">A</div><div class="ah-name" id="audioHostName">Host</div><div class="ah-live">● LIVE</div></div>
         <div class="bg-shade"></div>
 
         <div class="room-top">
@@ -1025,6 +1042,7 @@
           <h3>Play Music</h3>
           <p class="bal-line">Songs play in your live — everyone hears them with your voice.</p>
           <div class="gift-grid" id="musicGrid"></div>
+          <div style="display:flex;align-items:center;gap:.6rem;margin-top:.6rem"><span style="font-size:.82rem;opacity:.85">Music volume</span><input type="range" id="musicVol" min="0" max="100" value="80" style="flex:1" /></div>
           <button class="btn-cam" id="stopMusicBtn" type="button" style="margin-top:.6rem;display:none">Stop music</button>
         </div>
 
@@ -1513,7 +1531,7 @@
         { name: "Song 2 — Beat", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
         { name: "Song 3 — Groove", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" }
       ];
-      var musicCtx = null, musicEl = null, musicSrc = null, musicDest = null, micSrc = null, micStream = null;
+      var musicCtx = null, musicEl = null, musicSrc = null, musicDest = null, micSrc = null, micStream = null, musicGain = null;
       var musicOn = false, musicName = "";
       function currentAudioTrack(){ // v24: music on ho to mic+music mixed track, warna mic
         if (musicOn && musicDest) { var t = musicDest.stream.getAudioTracks()[0]; if (t) return t; }
@@ -1538,7 +1556,8 @@
           if (!musicEl) {
             musicEl = new Audio(); musicEl.loop = true;
             musicSrc = musicCtx.createMediaElementSource(musicEl);
-            musicSrc.connect(musicDest);
+            if (!musicGain) { musicGain = musicCtx.createGain(); musicGain.gain.value = 0.8; }
+            musicSrc.connect(musicGain); musicGain.connect(musicDest); // v25: volume slider isi se
           }
           if (!micSrc || micStream !== localStream) {
             if (micSrc) micSrc.disconnect();
@@ -1592,22 +1611,27 @@
       }
       function renderGuestTiles(){
         var wrap = $("guestTiles"); if (!wrap) return;
-        while (wrap.children.length < 4) {
+        var isAudio = !!(room && room.data && room.data.mode === 'audio'); // v25: audio room = 8 seats
+        var count = isAudio ? 8 : 4;
+        wrap.classList.toggle("audio-mode", isAudio);
+        while (wrap.children.length < count) {
           var t = document.createElement("div");
           t.className = "guest-tile";
-          t.innerHTML = '<video autoplay playsinline muted></video><span class="gavatar"></span><span class="gname"></span><button type="button" class="gkick" aria-label="Remove guest">\u00d7</button>';
+          t.innerHTML = '<video autoplay playsinline muted></video><span class="gavatar"></span><span class="gname"></span><span class="geq"><i></i><i></i><i></i></span><span class="seat-chair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 11V7a2 2 0 012-2h8a2 2 0 012 2v4"/><path d="M4 11h16v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3z"/><path d="M6 16v3M18 16v3"/></svg><b>+</b></span><button type="button" class="gkick" aria-label="Remove guest">\u00d7</button>';
           wrap.appendChild(t);
         }
+        while (wrap.children.length > count) wrap.removeChild(wrap.lastChild);
         var ordered = seatsSorted();
-        for (var i = 0; i < 4; i++) {
+        for (var i = 0; i < count; i++) {
           var tile = wrap.children[i];
           var seat = ordered[i] || null;
           var vid = tile.querySelector("video");
           var nm = tile.querySelector(".gname");
           var kick = tile.querySelector(".gkick");
-          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; kick.style.display = "none"; if (room && room.isHost) { tile.classList.add("empty"); nm.textContent = "Empty seat"; } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
-          tile.classList.add("on"); tile.classList.remove("empty");
+          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; kick.style.display = "none"; tile.onclick = null; if (isAudio) { tile.classList.add("empty"); nm.textContent = ""; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } } else if (room && room.isHost) { tile.classList.add("empty"); nm.textContent = "Empty seat"; } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
+          tile.classList.add("on"); tile.classList.remove("empty"); tile.onclick = null;
           var av = tile.querySelector(".gavatar");
+          var stream = guestStreamFor(seat, i); // v25: pehle stream, phir hasVideo (pehle ulta tha — galat tile audio banti thi)
           var hasVideo = stream && stream.getVideoTracks().length > 0;
           tile.classList.toggle("audio", !hasVideo);
           if (av) { // v24: audio guest ki photo ho to photo, warna harf
@@ -1617,7 +1641,6 @@
             else { av.innerHTML = ""; av.textContent = (seat.name || "G").charAt(0); }
           }
           nm.textContent = seat.name || "Guest";
-          var stream = guestStreamFor(seat, i);
           vid.muted = (!room.isHost && seat.seat === myGuestSeat); // v24: apni tile muted (echo na ho), baaki sab ki awaz aaye
           if (stream && vid.srcObject !== stream) { vid.srcObject = stream; vid.play().catch(function(){}); }
           else if (stream) { vid.play().catch(function(){}); }
@@ -2059,6 +2082,12 @@
         var av = $("roomHostAvatar");
         av.style.background = color;
         setAvatar(av, (room.data && room.data.hostAvatar) || (room.isHost && lastProfile ? lastProfile.avatar : ""), host.charAt(0)); // v24
+        var ahc = $("audioHostCircle"); // v25: audio room mein host ki badi photo upar
+        ahc.classList.toggle("show", !!(room.data && room.data.mode === 'audio'));
+        if (room.data && room.data.mode === 'audio') {
+          setAvatar($("audioHostAv"), (room.data && room.data.hostAvatar) || (room.isHost && lastProfile ? lastProfile.avatar : ""), host.charAt(0));
+          $("audioHostName").textContent = host;
+        }
         $("roomViewerCount").textContent = fmt(room.viewers);
         $("likeCount").textContent = fmt(room.likes);
         $("chatBox").innerHTML = "";
@@ -2267,11 +2296,19 @@
         }
       })();
       var liveMode = 'multi'; // v23: Bigo-style Go Live modes — multi / video / audio
+      function renderGoLiveSeats(){ // v25: preview mein multi=4 seats, audio=8 seats
+        var w = $("seatPreview");
+        var n = liveMode === 'audio' ? 8 : 4;
+        w.innerHTML = "";
+        for (var i = 0; i < n; i++) { var d = document.createElement("div"); d.className = "seat-ph"; d.innerHTML = "<b>+</b>Guest seat"; w.appendChild(d); }
+        w.classList.toggle("audio", liveMode === 'audio');
+        w.style.display = (liveMode === 'video') ? "none" : "";
+      }
       document.querySelectorAll("#modeTabs .mode-tab").forEach(function(b){
         b.addEventListener("click", function(){
           liveMode = b.getAttribute("data-mode");
           document.querySelectorAll("#modeTabs .mode-tab").forEach(function(x){ x.classList.toggle("on", x === b); });
-          $("seatPreview").style.display = (liveMode === 'video') ? "none" : "flex";
+          renderGoLiveSeats();
         });
       });
       $("startLiveBtn").addEventListener("click", function(){
@@ -2386,6 +2423,7 @@
       $("camToggleBtn").addEventListener("click", function(){ if (room && room.isHost) setHostCam(!hostCamOn); }); // v23
       $("musicBtn").addEventListener("click", function(){ renderMusicGrid(); $("musicTray").classList.toggle("open"); }); // v24
       $("stopMusicBtn").addEventListener("click", function(){ stopMusic(); $("musicTray").classList.remove("open"); }); // v24
+      $("musicVol").addEventListener("input", function(){ var v = this.value / 100; if (musicEl) musicEl.volume = v; if (musicGain) musicGain.gain.value = v; }); // v25: Mixer
       $("guestBtn").addEventListener("click", function(){ // v20
         if (myGuestSeat) leaveGuest(); else requestGuest();
       });
@@ -2888,6 +2926,7 @@
       renderHome();
       renderGifts();
       renderMusicGrid(); // v24
+      renderGoLiveSeats(); // v25
       renderCovers();
       renderReportReasons(); // v8
       setCoins(coins);
