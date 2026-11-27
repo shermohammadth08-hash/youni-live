@@ -783,8 +783,27 @@ function validRoomId(roomId){
 function isHostOf(sockId, roomId){
   return !!liveRooms[roomId] && liveRooms[roomId].hostId === sockId;
 }
+// v28: PK Battle — do hosts aamne-saamne, gifts se score, 5 minute timer.
+const PK_DURATION = 5 * 60 * 1000;
+const pkBattles = {}; // pkId -> battle
+const pkByRoom = {}; // roomId -> pkId
+function pkForRoom(roomId){ const id = pkByRoom[roomId]; return id ? pkBattles[id] : null; }
+function endPk(pkId, reason, forfeitRoomId){
+  const pk = pkBattles[pkId]; if (!pk) return;
+  if (pk.timer) clearTimeout(pk.timer);
+  delete pkBattles[pkId];
+  delete pkByRoom[pk.roomA]; delete pkByRoom[pk.roomB];
+  let winner = null;
+  if (forfeitRoomId) winner = forfeitRoomId === pk.roomA ? 'B' : 'A';
+  else if (pk.scoreA !== pk.scoreB) winner = pk.scoreA > pk.scoreB ? 'A' : 'B';
+  const payload = { pkId: pkId, winner: winner, winnerRoom: winner ? (winner === 'A' ? pk.roomA : pk.roomB) : null, winnerName: winner ? (winner === 'A' ? pk.nameA : pk.nameB) : null, scoreA: pk.scoreA, scoreB: pk.scoreB, nameA: pk.nameA, nameB: pk.nameB, roomA: pk.roomA, roomB: pk.roomB, reason: reason || 'time' };
+  io.to(pk.roomA).emit("pk result", payload);
+  io.to(pk.roomB).emit("pk result", payload);
+}
 function endLiveRoom(roomId){
   if (!liveRooms[roomId]) return;
+  const pk = pkForRoom(roomId);
+  if (pk) endPk(pk.id, 'live-ended', roomId); // live khatam — doosra host jeetta hai
   delete liveRooms[roomId];
   clearGuestSeats(roomId);
   io.emit("live ended", { room: roomId });
@@ -804,7 +823,15 @@ function roomHiddenFor(viewerName, hostName){
 function liveListFor(viewerName){
   return Object.keys(liveRooms)
     .filter((rid) => !roomHiddenFor(viewerName, liveRooms[rid].host))
-    .map((rid) => Object.assign({ room: rid, hostAvatar: avatarFor(liveRooms[rid].host) }, liveRooms[rid]));
+    .map((rid) => {
+      const base = Object.assign({ room: rid, hostAvatar: avatarFor(liveRooms[rid].host) }, liveRooms[rid]);
+      const pk = pkForRoom(rid); // v28: PK chal rahi ho to late joiner ko bhi pata chale
+      if (pk) {
+        const isA = pk.roomA === rid;
+        base.pk = { id: pk.id, roomA: pk.roomA, roomB: pk.roomB, nameA: pk.nameA, nameB: pk.nameB, opponentRoom: isA ? pk.roomB : pk.roomA, opponentName: isA ? pk.nameB : pk.nameA, endsAt: pk.endsAt, scoreA: pk.scoreA, scoreB: pk.scoreB };
+      }
+      return base;
+    });
 }
 
 function emitChatToRoom(roomId, msg){
@@ -922,6 +949,13 @@ io.on("connection", (sock) => {
     if (ti === -1) return;
     const tok = giftTokens.splice(ti, 1)[0];
     emitGiftToRoom(roomId, { room: roomId, from: from, to: to, gift: gift, cost: tok.cost, time: now });
+    const pk = pkForRoom(roomId); // v28: PK mein gift = score
+    if (pk) {
+      if (roomId === pk.roomA) pk.scoreA += tok.cost; else pk.scoreB += tok.cost;
+      const sp = { pkId: pk.id, scoreA: pk.scoreA, scoreB: pk.scoreB };
+      io.to(pk.roomA).emit("pk score", sp);
+      io.to(pk.roomB).emit("pk score", sp);
+    }
   });
 
   // ---- WebRTC signalling: sirf usi room ke andar, host <-> watcher ----
@@ -952,6 +986,61 @@ io.on("connection", (sock) => {
     if (!theme || !liveRooms[roomId]) return;
     liveRooms[roomId].theme = theme;
     io.to(roomId).emit("room theme", { room: roomId, theme: theme });
+  });
+  // v28: PK Battle events
+  sock.on("pk request", (data) => {
+    if (!data || typeof data !== "object") return;
+    const toRoom = typeof data.toRoom === "string" ? data.toRoom : "";
+    if (!joinedRoom || !isHostOf(sock.id, joinedRoom)) return;
+    if (!toRoom || toRoom === joinedRoom || !liveRooms[toRoom]) return;
+    if (liveRooms[joinedRoom].mode === 'audio' || liveRooms[toRoom].mode === 'audio') { io.to(sock.id).emit("pk declined", { reason: "audio" }); return; }
+    if (pkForRoom(joinedRoom) || pkForRoom(toRoom)) { io.to(sock.id).emit("pk declined", { reason: "busy" }); return; }
+    io.to(liveRooms[toRoom].hostId).emit("pk invite", { fromRoom: joinedRoom, fromName: liveRooms[joinedRoom].host, fromHostId: sock.id });
+  });
+  sock.on("pk accept", (data) => {
+    if (!data || typeof data !== "object") return;
+    const fromRoom = typeof data.fromRoom === "string" ? data.fromRoom : "";
+    if (!joinedRoom || !isHostOf(sock.id, joinedRoom)) return;
+    if (!fromRoom || !liveRooms[fromRoom] || !liveRooms[joinedRoom]) return;
+    if (pkForRoom(joinedRoom) || pkForRoom(fromRoom)) return;
+    if (liveRooms[fromRoom].mode === 'audio' || liveRooms[joinedRoom].mode === 'audio') return;
+    const pkId = 'pk-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const pk = { id: pkId, roomA: fromRoom, roomB: joinedRoom, hostA: liveRooms[fromRoom].hostId, hostB: sock.id, nameA: liveRooms[fromRoom].host, nameB: liveRooms[joinedRoom].host, scoreA: 0, scoreB: 0, endsAt: Date.now() + PK_DURATION, timer: null };
+    pk.timer = setTimeout(() => endPk(pkId, 'time'), PK_DURATION);
+    pkBattles[pkId] = pk;
+    pkByRoom[fromRoom] = pkId; pkByRoom[joinedRoom] = pkId;
+    const payload = { pkId: pkId, roomA: pk.roomA, roomB: pk.roomB, nameA: pk.nameA, nameB: pk.nameB, hostA: pk.hostA, hostB: pk.hostB, endsAt: pk.endsAt, scoreA: 0, scoreB: 0 };
+    io.to(fromRoom).emit("pk start", payload);
+    io.to(joinedRoom).emit("pk start", payload);
+  });
+  sock.on("pk reject", (data) => {
+    if (!data || typeof data !== "object") return;
+    const fromRoom = typeof data.fromRoom === "string" ? data.fromRoom : "";
+    if (!fromRoom || !liveRooms[fromRoom]) return;
+    io.to(liveRooms[fromRoom].hostId).emit("pk declined", { reason: "declined" });
+  });
+  sock.on("pk end", () => {
+    if (!joinedRoom || !isHostOf(sock.id, joinedRoom)) return;
+    const pk = pkForRoom(joinedRoom);
+    if (pk) endPk(pk.id, 'ended');
+  });
+  sock.on("pk offer", (data) => { // v28: PK video signalling relay
+    if (!data || typeof data !== "object" || !pkForRoom(joinedRoom)) return;
+    const to = typeof data.to === "string" ? data.to : "";
+    if (!to || !data.sdp) return;
+    io.to(to).emit("pk offer", { from: sock.id, room: joinedRoom, kind: data.kind, sdp: data.sdp });
+  });
+  sock.on("pk answer", (data) => {
+    if (!data || typeof data !== "object" || !pkForRoom(joinedRoom)) return;
+    const to = typeof data.to === "string" ? data.to : "";
+    if (!to || !data.sdp) return;
+    io.to(to).emit("pk answer", { from: sock.id, room: joinedRoom, kind: data.kind, sdp: data.sdp });
+  });
+  sock.on("pk ice", (data) => {
+    if (!data || typeof data !== "object" || !pkForRoom(joinedRoom)) return;
+    const to = typeof data.to === "string" ? data.to : "";
+    if (!to || !data.candidate) return;
+    io.to(to).emit("pk ice", { from: sock.id, room: joinedRoom, kind: data.kind, candidate: data.candidate });
   });
   sock.on("camera state", (data) => { // v23: host camera on/off — sab viewers ko batayein
     if (!data || typeof data !== "object") return;

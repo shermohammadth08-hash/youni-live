@@ -388,6 +388,25 @@
       #roomView.room-multi .guest-tile { max-width: none; aspect-ratio: auto; }
       .theme-pick { border: 3px solid transparent; border-radius: 12px; overflow: hidden; padding: 0; cursor: pointer; height: 74px; }
       .theme-pick.on { border-color: var(--brand); }
+      /* v28: PK Battle — split screen, score bar */
+      #pkVideo { display: none; position: absolute; top: 170px; right: 10px; width: calc(50% - 14px); height: 38%; border-radius: 16px; object-fit: cover; background: #000; z-index: 4; }
+      #pkVideo.show { display: block; }
+      #roomView.pk-mode .room-video.show { top: 170px; left: 10px; right: auto; bottom: auto; width: calc(50% - 14px); height: 38%; border-radius: 16px; }
+      #roomView.pk-mode .guest-tiles { display: none !important; }
+      #roomView.pk-mode #audioHostCircle { display: none !important; }
+      #pkBar { display: none; position: absolute; top: 108px; left: 10px; right: 10px; z-index: 6; background: rgba(10,10,16,.65); border-radius: 12px; padding: .5rem .7rem; }
+      #pkBar.show { display: block; }
+      .pk-row { display: flex; align-items: center; gap: .5rem; font-size: .8rem; font-weight: 800; }
+      .pk-side { flex: 1; display: flex; gap: .4rem; align-items: center; min-width: 0; }
+      .pk-side.right { justify-content: flex-end; }
+      .pk-side span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .pk-mid { font-size: .85rem; }
+      .pk-track { height: 8px; border-radius: 99px; background: #3b82f6; margin-top: .4rem; overflow: hidden; }
+      .pk-fill { height: 100%; background: #ec4899; border-radius: 99px; width: 50%; transition: width .5s; }
+      #pkInvite, #pkResult { display: none; position: absolute; left: 50%; top: 38%; transform: translate(-50%,-50%); z-index: 50; background: rgba(10,10,16,.94); border: 1px solid rgba(255,255,255,.2); border-radius: 16px; padding: 1.2rem; text-align: center; width: 78%; }
+      #pkInvite.show, #pkResult.show { display: block; }
+      .pk-row-item { display: flex; align-items: center; gap: .6rem; padding: .5rem 0; border-bottom: 1px solid rgba(255,255,255,.1); }
+      .pk-row-item .avatar { width: 34px; height: 34px; font-size: .9rem; }
       .room-view .room-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; background: #000; }
       .room-view .room-video.show { display: block; }
       /* v20: Multi-guest tiles — host + 4 guests */
@@ -971,6 +990,10 @@
         <img class="bg-img" id="roomBg" alt="" />
         <div class="bg-theme" id="roomBgTheme"></div>
         <video class="room-video" id="roomVideo" autoplay playsinline muted></video>
+        <video id="pkVideo" autoplay playsinline></video>
+        <div id="pkBar"><div class="pk-row"><div class="pk-side"><b id="pkNameA">A</b><span id="pkScoreA">0</span></div><div class="pk-mid" id="pkTimer">5:00</div><div class="pk-side right"><span id="pkScoreB">0</span><b id="pkNameB">B</b></div></div><div class="pk-track"><div class="pk-fill" id="pkFill"></div></div></div>
+        <div id="pkInvite"><h3 style="margin:.2rem 0 .6rem">PK Battle request</h3><p style="margin:.2rem 0 .8rem"><b id="pkInviteName">A host</b> challenges you to a PK!</p><div style="display:flex;gap:.6rem;justify-content:center"><button class="btn-cam" id="pkAcceptBtn" type="button">Accept</button><button class="btn-cam" id="pkRejectBtn" type="button">Reject</button></div></div>
+        <div id="pkResult"><h3 style="margin:.2rem 0 .6rem" id="pkResultTitle">PK Result</h3><p style="margin:.2rem 0 .8rem" id="pkResultText"></p><button class="btn-cam" id="pkResultCloseBtn" type="button">Close</button></div>
         <div class="guest-tiles" id="guestTiles"></div>
         <div id="audioHostCircle"><div class="ah-av" id="audioHostAv">A</div><div class="ah-name" id="audioHostName">Host</div><div class="ah-live">● LIVE</div></div>
         <div class="bg-shade"></div>
@@ -1033,6 +1056,7 @@
           </div>
           <div class="room-actions" id="hostActions" style="display:none">
             <p style="margin:0;font-size:.82rem;opacity:.9;flex:1">You're live — viewers are joining!</p>
+            <button class="btn-cam" id="pkBtn" type="button">PK</button>
             <button class="btn-cam" id="themeBtn" type="button">Theme</button>
             <button class="btn-cam" id="musicBtn" type="button">Music</button>
             <button class="btn-cam" id="camToggleBtn" type="button">Camera Off</button>
@@ -1053,6 +1077,13 @@
           <p class="bal-line">Pick a background — everyone in the room sees it change.</p>
           <div class="covers" id="themeGrid"></div>
           <div class="covers" id="themeCoverGrid" style="margin-top:.55rem"></div>
+        </div>
+
+        <!-- v28: PK — doosre live host ko challenge karein -->
+        <div class="gift-tray" id="pkTray">
+          <h3>PK Battle</h3>
+          <p class="bal-line">Challenge another live host — 5 minutes, gifts decide the winner.</p>
+          <div id="pkList"></div>
         </div>
 
         <!-- v24: Music — host gaane chalaye, sab ko awaz ke saath sunai de -->
@@ -1504,6 +1535,96 @@
         renderGuestTiles(); // v20
         hideRoomVideo();
       }
+      var pkInfo = null; // v28: PK Battle state
+      var pkPC = null, pkOpponentStream = null, pkViewerPC = null, pkViewerPCs = {};
+      var pkTimerInt = null, pkInviteFrom = null, pkInviteTimer = null;
+      function pkOpponentId(){ if (!pkInfo) return ""; return (myLiveRoomId === pkInfo.roomA) ? pkInfo.hostB : pkInfo.hostA; }
+      function renderPkBar(){
+        if (!pkInfo) return;
+        $("pkNameA").textContent = pkInfo.nameA || "A";
+        $("pkNameB").textContent = pkInfo.nameB || "B";
+        $("pkScoreA").textContent = pkInfo.scoreA || 0;
+        $("pkScoreB").textContent = pkInfo.scoreB || 0;
+        var total = (pkInfo.scoreA || 0) + (pkInfo.scoreB || 0);
+        $("pkFill").style.width = (total ? (pkInfo.scoreA / total * 100) : 50) + "%";
+      }
+      function startPkTimer(){
+        clearInterval(pkTimerInt);
+        var tick = function(){
+          if (!pkInfo) return;
+          var left = Math.max(0, pkInfo.endsAt - Date.now());
+          var m = Math.floor(left / 60000), s2 = Math.floor(left % 60000 / 1000);
+          $("pkTimer").textContent = m + ":" + (s2 < 10 ? "0" : "") + s2;
+          if (left <= 0) clearInterval(pkTimerInt);
+        };
+        tick(); pkTimerInt = setInterval(tick, 1000);
+      }
+      function updatePkBtn(){
+        var b = $("pkBtn"); if (!b) return;
+        if (!room || !room.isHost || !room.data || room.data.mode === 'audio') { b.style.display = "none"; return; }
+        b.style.display = "";
+        b.textContent = pkInfo ? "End PK" : "PK";
+      }
+      function showPkVideo(stream){
+        var v = $("pkVideo");
+        v.srcObject = stream; v.classList.add("show"); v.muted = false;
+        v.play().catch(function(){ v.muted = true; v.play().catch(function(){}); });
+      }
+      function closePkPC(){ if (pkPC) { try { pkPC.close(); } catch(e){} pkPC = null; } }
+      function closePkViewerPC(id){ var pc = pkViewerPCs[id]; if (pc) { try { pc.close(); } catch(e){} delete pkViewerPCs[id]; } }
+      function cleanupPk(){ // v28: PK khatam — PCs band, UI reset
+        closePkPC();
+        Object.keys(pkViewerPCs).forEach(function(id){ closePkViewerPC(id); });
+        if (pkViewerPC) { try { pkViewerPC.close(); } catch(e){} pkViewerPC = null; }
+        pkOpponentStream = null; pkInfo = null;
+        clearInterval(pkTimerInt);
+        var pv = $("pkVideo"); pv.classList.remove("show"); pv.srcObject = null;
+        $("pkBar").classList.remove("show");
+        $("pkInvite").classList.remove("show");
+        $("roomView").classList.remove("pk-mode");
+        updatePkBtn();
+      }
+      function createPkPC(){
+        closePkPC();
+        var pc = new RTCPeerConnection(RTC_CONF);
+        pkPC = pc;
+        if (localStream) {
+          localStream.getTracks().forEach(function(t){ if (t.kind === 'video') pc.addTrack(t, localStream); });
+          var at = currentAudioTrack(); if (at) pc.addTrack(at, localStream);
+        }
+        pc.ontrack = function(e){
+          var stream = e.streams && e.streams[0]; if (!stream) return;
+          pkOpponentStream = stream;
+          showPkVideo(stream);
+          Object.keys(watchers).forEach(function(wid){ sendPkToViewer(wid); });
+        };
+        pc.onicecandidate = function(e){ if (e.candidate && pkInfo) socket.emit("pk ice", { to: pkOpponentId(), room: myLiveRoomId, kind: "host", candidate: e.candidate }); };
+        return pc;
+      }
+      function sendPkToViewer(viewerId){ // v28: host opponent ki video apne viewers ko bheje
+        if (!pkOpponentStream || !pkInfo) return;
+        closePkViewerPC(viewerId);
+        var pc = new RTCPeerConnection(RTC_CONF);
+        pkViewerPCs[viewerId] = pc;
+        pkOpponentStream.getTracks().forEach(function(t){ pc.addTrack(t, pkOpponentStream); });
+        pc.onicecandidate = function(e){ if (e.candidate) socket.emit("pk ice", { to: viewerId, room: myLiveRoomId, kind: "viewer", candidate: e.candidate }); };
+        pc.createOffer().then(function(o){ return pc.setLocalDescription(o); }).then(function(){ socket.emit("pk offer", { to: viewerId, room: myLiveRoomId, kind: "viewer", sdp: pc.localDescription }); }).catch(function(){ closePkViewerPC(viewerId); });
+      }
+      function renderPkList(){ // v28: challenge karne ke liye doosre live hosts
+        var w = $("pkList"); if (!w) return; w.innerHTML = "";
+        var others = Object.keys(liveFeed).map(function(k){ return liveFeed[k]; }).filter(function(r){ return r.room !== myLiveRoomId && r.mode !== 'audio' && !r.pk; });
+        if (!others.length) { w.innerHTML = "<p style='opacity:.8;font-size:.85rem'>No other live hosts right now.</p>"; return; }
+        others.forEach(function(r){
+          var row = document.createElement("div");
+          row.className = "pk-row-item";
+          row.innerHTML = '<span class="avatar" style="background:' + (r.color || '#7a4fd0') + '">' + (r.hostAvatar ? '<img src="' + r.hostAvatar + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%" />' : r.host.charAt(0)) + '</span><span style="flex:1">' + r.host + '</span>';
+          var b = document.createElement("button");
+          b.type = "button"; b.className = "btn-cam"; b.textContent = "Challenge";
+          b.addEventListener("click", function(){ if (socket) socket.emit("pk request", { toRoom: r.room }); toast("PK request sent to " + r.host + "."); $("pkTray").classList.remove("open"); });
+          row.appendChild(b);
+          w.appendChild(row);
+        });
+      }
       var THEMES = [ // v26: room backgrounds — gradients
         { id: "g1", name: "Midnight", css: "linear-gradient(160deg,#0f0c29,#302b63 55%,#24243e)" },
         { id: "g2", name: "Sunset", css: "linear-gradient(160deg,#ff9966,#ff5e62)" },
@@ -1809,6 +1930,76 @@
           if (!d || !d.room || d.room !== currentRoomId || !room || room.isHost) return;
           currentTheme = d.theme; applyRoomTheme(d.theme);
         });
+        /* ================= v28: PK Battle ================= */
+        s.on("pk invite", function(d){ // host ko PK challenge aaya
+          if (!d || !room || !room.isHost) return;
+          $("pkInviteName").textContent = d.fromName || "A host";
+          $("pkInvite").classList.add("show");
+          pkInviteFrom = d.fromRoom;
+          clearTimeout(pkInviteTimer);
+          pkInviteTimer = setTimeout(function(){ $("pkInvite").classList.remove("show"); if (socket && pkInviteFrom) socket.emit("pk reject", { fromRoom: pkInviteFrom }); pkInviteFrom = null; }, 30000);
+        });
+        s.on("pk declined", function(d){
+          if (!d) return;
+          toast(d.reason === "busy" ? "That host is already in a PK." : d.reason === "audio" ? "PK is video only." : "PK request declined.");
+        });
+        s.on("pk start", function(d){
+          if (!d || !room) return;
+          var myRoom = room.isHost ? myLiveRoomId : currentRoomId;
+          if (myRoom !== d.roomA && myRoom !== d.roomB) return;
+          pkInfo = d;
+          renderPkBar();
+          $("pkBar").classList.add("show");
+          $("roomView").classList.add("pk-mode");
+          startPkTimer();
+          updatePkBtn();
+          if (room.isHost && myLiveRoomId === d.roomA) { // challenger host-to-host PC shuru kare
+            createPkPC();
+            pkPC.createOffer().then(function(o){ return pkPC.setLocalDescription(o); }).then(function(){ s.emit("pk offer", { to: d.hostB, room: myLiveRoomId, kind: "host", sdp: pkPC.localDescription }); }).catch(function(){});
+          }
+        });
+        s.on("pk score", function(d){
+          if (!d || !pkInfo || d.pkId !== pkInfo.pkId) return;
+          pkInfo.scoreA = d.scoreA; pkInfo.scoreB = d.scoreB;
+          renderPkBar();
+        });
+        s.on("pk result", function(d){
+          if (!d || !pkInfo || d.pkId !== pkInfo.pkId) return;
+          $("pkResultTitle").textContent = d.winnerName ? d.winnerName + " wins the PK!" : "PK ended in a tie!";
+          $("pkResultText").textContent = d.nameA + " " + d.scoreA + "  —  " + d.scoreB + " " + d.nameB;
+          $("pkResult").classList.add("show");
+          setTimeout(function(){ $("pkResult").classList.remove("show"); }, 10000);
+          cleanupPk();
+        });
+        s.on("pk offer", function(d){
+          if (!d || !d.sdp || !pkInfo) return;
+          if (d.kind === "host" && room && room.isHost) { // opponent host ki offer — answer bhejein
+            createPkPC();
+            pkPC.setRemoteDescription(new RTCSessionDescription(d.sdp)).then(function(){ return pkPC.createAnswer(); }).then(function(ans){ return pkPC.setLocalDescription(ans); }).then(function(){ s.emit("pk answer", { to: d.from, room: myLiveRoomId, kind: "host", sdp: pkPC.localDescription }); }).catch(function(){});
+            return;
+          }
+          if (d.kind === "viewer" && room && !room.isHost && d.room === currentRoomId) { // host opponent ki video bhej raha hai
+            if (pkViewerPC) { try { pkViewerPC.close(); } catch(e){} }
+            var pc = new RTCPeerConnection(RTC_CONF);
+            pkViewerPC = pc;
+            pc.ontrack = function(e){ var stream = e.streams && e.streams[0]; if (stream) showPkVideo(stream); };
+            pc.onicecandidate = function(e){ if (e.candidate) s.emit("pk ice", { to: d.from, room: d.room, kind: "viewer", candidate: e.candidate }); };
+            pc.setRemoteDescription(new RTCSessionDescription(d.sdp)).then(function(){ return pc.createAnswer(); }).then(function(ans){ return pc.setLocalDescription(ans); }).then(function(){ s.emit("pk answer", { to: d.from, room: d.room, kind: "viewer", sdp: pc.localDescription }); }).catch(function(){});
+          }
+        });
+        s.on("pk answer", function(d){
+          if (!d || !d.sdp || !pkInfo) return;
+          if (d.kind === "host" && pkPC) pkPC.setRemoteDescription(new RTCSessionDescription(d.sdp)).catch(function(){});
+          else if (d.kind === "viewer" && pkViewerPCs[d.from]) pkViewerPCs[d.from].setRemoteDescription(new RTCSessionDescription(d.sdp)).catch(function(){});
+        });
+        s.on("pk ice", function(d){
+          if (!d || !d.candidate || !pkInfo) return;
+          var pc = null;
+          if (d.kind === "host") pc = pkPC;
+          else if (room && room.isHost) pc = pkViewerPCs[d.from];
+          else pc = pkViewerPC;
+          if (pc) pc.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(function(){});
+        });
         s.on("camera state", function(d){ // v23: host ne camera on/off kiya
           if (!d || !d.room || d.room !== currentRoomId || !room || room.isHost) return;
           roomCamOff = !d.on;
@@ -1840,6 +2031,7 @@
           hostPCs[d.watcherId] = pc;
           localStream.getTracks().forEach(function(t){ if (t.kind === 'video') pc.addTrack(t, localStream); });
           var at = currentAudioTrack(); if (at) pc.addTrack(at, localStream); // v24: music on ho to mixed awaz
+          if (pkInfo && pkOpponentStream) sendPkToViewer(d.watcherId); // v28: PK mein naya viewer — opponent ki video bhi
           // v20: maujooda guests ki video bhi naye viewer ko (apni khud ki nahi)
           seatsSorted().forEach(function(seat){
             if (seat.guestId === d.watcherId) return;
@@ -2096,6 +2288,13 @@
           following: false, gifts: 0, giftValue: 0, elapsed: 0
         };
         roomCamOff = (r.cameraOn === false); // v23: late joiner — camera pehle se off hai to avatar dikhe
+        if (r.pk) { // v28: late joiner — PK pehle se chal rahi hai
+          pkInfo = { pkId: r.pk.id, roomA: r.pk.roomA, roomB: r.pk.roomB, nameA: r.pk.nameA, nameB: r.pk.nameB, hostA: "", hostB: "", endsAt: r.pk.endsAt, scoreA: r.pk.scoreA, scoreB: r.pk.scoreB };
+          renderPkBar();
+          $("pkBar").classList.add("show");
+          $("roomView").classList.add("pk-mode");
+          startPkTimer();
+        }
         setupRoomUI(r.title, r.host, r.color, r.followers, IMG[r.img], r.host + "'s live stream");
         /* v13: asli live mein host ke asli followers + Follow haalat dikhayein. */
         if (r.id && r.id.indexOf("live-") === 0 && currentUser && window.location.protocol !== "file:") {
@@ -2153,6 +2352,8 @@
         renderGuestBtn(); renderGuestRequests(); renderGuestTiles(); // v20
         if (room.isHost) { hostCamOn = true; } renderCamBtn(); // v23
         $("soundBtn").classList.remove("off"); // v24
+        if (pkInfo) cleanupPk(); // v28: naya room — purani PK reset
+        updatePkBtn(); // v28
       }
       function startRoomLoops(pool, hostMode){
         clearTimers();
@@ -2192,6 +2393,9 @@
         $("giftTray").classList.remove("open");
         $("musicTray").classList.remove("open"); // v24
         $("themeTray").classList.remove("open"); // v26
+        $("pkTray").classList.remove("open"); // v28
+        $("pkResult").classList.remove("show"); // v28
+        cleanupPk(); // v28
         $("userSheet").classList.remove("open"); // v8
         $("watcherPanel").style.display = "none"; // v8
       }
@@ -2305,6 +2509,7 @@
       $("soundBtn").addEventListener("click", function(){ // v24: host ki awaz on/off
         var v = $("roomVideo");
         v.muted = !v.muted;
+        var pv = $("pkVideo"); if (pv) pv.muted = v.muted; // v28
         this.classList.toggle("off", v.muted);
         toast(v.muted ? "Sound off." : "Sound on.");
       });
@@ -2502,6 +2707,14 @@
         if (socket && myLiveRoomId) socket.emit("room theme", { room: myLiveRoomId, theme: id });
         renderThemeGrid();
       }
+      $("pkBtn").addEventListener("click", function(){ // v28
+        if (!room || !room.isHost) return;
+        if (pkInfo) { if (socket) socket.emit("pk end"); return; }
+        renderPkList(); $("pkTray").classList.toggle("open");
+      });
+      $("pkAcceptBtn").addEventListener("click", function(){ if (socket && pkInviteFrom) socket.emit("pk accept", { fromRoom: pkInviteFrom }); $("pkInvite").classList.remove("show"); clearTimeout(pkInviteTimer); pkInviteFrom = null; }); // v28
+      $("pkRejectBtn").addEventListener("click", function(){ if (socket && pkInviteFrom) socket.emit("pk reject", { fromRoom: pkInviteFrom }); $("pkInvite").classList.remove("show"); clearTimeout(pkInviteTimer); pkInviteFrom = null; }); // v28
+      $("pkResultCloseBtn").addEventListener("click", function(){ $("pkResult").classList.remove("show"); }); // v28
       $("themeBtn").addEventListener("click", function(){ renderThemeGrid(); $("themeTray").classList.toggle("open"); }); // v26
       $("musicBtn").addEventListener("click", function(){ renderMusicGrid(); $("musicTray").classList.toggle("open"); }); // v24
       $("stopMusicBtn").addEventListener("click", function(){ stopMusic(); $("musicTray").classList.remove("open"); }); // v24
