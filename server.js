@@ -757,7 +757,7 @@ function seatsFor(roomId){
   return guestSeats[roomId];
 }
 function seatsPayload(roomId){
-  return seatsFor(roomId).map(function(x){ return x ? { seat: x.seat, guestId: x.guestId, name: x.name, seq: x.seq, avatar: avatarFor(x.name) } : null; });
+  return seatsFor(roomId).map(function(x){ return x ? { seat: x.seat, guestId: x.guestId, name: x.name, seq: x.seq, avatar: avatarFor(x.name), muted: !!(x.selfMuted || x.hostMuted), hostMuted: !!x.hostMuted } : null; }); // v31: mute state
 }
 function broadcastSeats(roomId){
   io.to(roomId).emit("guest seats", { room: roomId, seats: seatsPayload(roomId) });
@@ -1118,6 +1118,26 @@ io.on("connection", (sock) => {
     const guestId = typeof data.guestId === "string" ? data.guestId : "";
     if (!isHostOf(sock.id, roomId)) return;
     if (freeGuestSeat(roomId, guestId)) io.to(guestId).emit("guest removed", { room: roomId });
+  });
+
+  // v31: Mute system — guest khud ko mute kare; host guest ko mute kare (guest khud unmute nahi kar sakta)
+  sock.on("guest mute self", (data) => {
+    if (!data || typeof data !== "object") return;
+    if (!joinedRoom || !liveRooms[joinedRoom]) return;
+    const seat = seatsFor(joinedRoom).find((x) => x && x.guestId === sock.id);
+    if (!seat) return; // sirf seated guest
+    seat.selfMuted = !!data.muted;
+    broadcastSeats(joinedRoom);
+  });
+  sock.on("guest mute", (data) => {
+    if (!data || typeof data !== "object") return;
+    const guestId = typeof data.guestId === "string" ? data.guestId : "";
+    if (!joinedRoom || !isHostOf(sock.id, joinedRoom) || !guestId) return;
+    const seat = seatsFor(joinedRoom).find((x) => x && x.guestId === guestId);
+    if (!seat) return;
+    seat.hostMuted = !!data.muted;
+    broadcastSeats(joinedRoom);
+    io.to(guestId).emit("guest mute", { room: joinedRoom, muted: seat.hostMuted });
   });
 
   // ---- v20: Guest media signalling — guest offer karta hai, host answer deta hai ----

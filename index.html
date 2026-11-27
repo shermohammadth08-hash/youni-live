@@ -457,6 +457,11 @@
       .guest-tile video { width: 100%; height: 100%; object-fit: cover; }
       .guest-tile .gname { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font-size: .62rem; font-weight: 700; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .guest-tile .gkick { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: .75rem; line-height: 1; cursor: pointer; pointer-events: auto; }
+      .guest-tile .gmute { display: none; position: absolute; top: 2px; right: 26px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; cursor: pointer; pointer-events: auto; align-items: center; justify-content: center; padding: 0; }
+      .guest-tile .gmute.show { display: flex; }
+      .guest-tile .gmute svg { width: 12px; height: 12px; }
+      .guest-tile .gmute.off { background: rgba(220,38,38,.9); }
+      .guest-tile .gmute:disabled { opacity: .55; cursor: default; } /* v31: host ne mute kiya — guest khud unmute nahi kar sakta */
       .round-btn.guest-on { background: #e8334d; color: #fff; }
       .guest-reqs { border-top: 1px solid rgba(255,255,255,.15); margin-top: .5rem; padding-top: .5rem; }
       .viewer-live-badge { position: relative; z-index: 3; margin: .45rem .85rem 0; display: none; align-items: center; gap: .35rem; font-size: .74rem; font-weight: 800; }
@@ -1068,6 +1073,7 @@
             <button class="btn-cam" id="pkBtn" type="button">PK</button>
             <button class="btn-cam" id="themeBtn" type="button">Theme</button>
             <button class="btn-cam" id="musicBtn" type="button">Music</button>
+            <button class="btn-cam" id="hostMicBtn" type="button">Mic Off</button>
             <button class="btn-cam" id="camToggleBtn" type="button">Camera Off</button>
             <button class="btn-end" id="endLiveBtn" type="button">End Live</button>
           </div>
@@ -1486,6 +1492,20 @@
       var guestStream = null;  // guest side: mera camera jab main guest hun
       var guestHostId = null;  // guest side: host ka socket id (guest signalling ke liye)
       var myGuestSeat = 0;     // guest side: 0 = guest nahi, warna seat 1-4
+      var myMicMuted = false, hostMutedMe = false, hostMicMuted = false; // v31: mute system
+      var MIC_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>';
+      var MIC_OFF_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3M4 4l16 16"/></svg>';
+      function applyMyMic(){ // v31: guest ki awaz — host-mute ya self-mute, koi ek bhi ho to band
+        var tr = (typeof guestStream !== "undefined" && guestStream) ? guestStream.getAudioTracks()[0] : null;
+        if (tr) tr.enabled = !(myMicMuted || hostMutedMe);
+      }
+      function toggleMyMic(){ // v31: guest khud ko mute/unmute kare
+        if (hostMutedMe) { toast("The host muted you."); return; }
+        myMicMuted = !myMicMuted;
+        applyMyMic();
+        if (socket && currentRoomId) socket.emit("guest mute self", { room: currentRoomId, muted: myMicMuted });
+        renderGuestTiles();
+      }
       var guestRequested = false; // viewer side: request bhej di, approve ka intezar
       var guestRequests = [];  // host side: [{guestId, name}]
       var roomSeats = [];      // sab ke liye: current seats [{seat, guestId, name, seq} | null]
@@ -1786,7 +1806,7 @@
         while (wrap.children.length < count) {
           var t = document.createElement("div");
           t.className = "guest-tile";
-          t.innerHTML = '<video autoplay playsinline muted></video><span class="gavatar"></span><span class="gname"></span><span class="geq"><i></i><i></i><i></i></span><span class="seat-chair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 11V7a2 2 0 012-2h8a2 2 0 012 2v4"/><path d="M4 11h16v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3z"/><path d="M6 16v3M18 16v3"/></svg><b>+</b></span><button type="button" class="gkick" aria-label="Remove guest">\u00d7</button>';
+          t.innerHTML = '<video autoplay playsinline muted></video><span class="gavatar"></span><span class="gname"></span><span class="geq"><i></i><i></i><i></i></span><span class="seat-chair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 11V7a2 2 0 012-2h8a2 2 0 012 2v4"/><path d="M4 11h16v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3z"/><path d="M6 16v3M18 16v3"/></svg><b>+</b></span><button type="button" class="gkick" aria-label="Remove guest">\u00d7</button><button type="button" class="gmute" aria-label="Mute or unmute"></button>';
           wrap.appendChild(t);
         }
         while (wrap.children.length > count) wrap.removeChild(wrap.lastChild);
@@ -1797,8 +1817,23 @@
           var vid = tile.querySelector("video");
           var nm = tile.querySelector(".gname");
           var kick = tile.querySelector(".gkick");
-          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; kick.style.display = "none"; tile.onclick = null; var guestsOn = room && room.data && room.data.multiGuest !== false && room.data.mode !== 'video'; if (isAudio) { tile.classList.add("empty"); nm.textContent = ""; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } } else if (guestsOn) { tile.classList.add("empty"); nm.textContent = room.isHost ? "Empty seat" : "+ Join"; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
+          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; kick.style.display = "none"; var _m = tile.querySelector(".gmute"); if (_m) { _m.classList.remove("show"); _m.onclick = null; } tile.onclick = null; var guestsOn = room && room.data && room.data.multiGuest !== false && room.data.mode !== 'video'; if (isAudio) { tile.classList.add("empty"); nm.textContent = ""; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } } else if (guestsOn) { tile.classList.add("empty"); nm.textContent = room.isHost ? "Empty seat" : "+ Join"; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
           tile.classList.add("on"); tile.classList.remove("empty"); tile.onclick = null;
+          var mute = tile.querySelector(".gmute"); // v31: mute button / indicator
+          if (mute) {
+            var isMuted = !!(seat.muted), isHostMuted = !!(seat.hostMuted), isMine = (seat.seat === myGuestSeat);
+            mute.innerHTML = isMuted ? MIC_OFF_SVG : MIC_SVG;
+            mute.classList.toggle("off", isMuted);
+            if (room && room.isHost) { // host — guest ko mute/unmute kare
+              mute.classList.add("show"); mute.disabled = false;
+              mute.onclick = (function(gid, hm){ return function(ev){ if (ev) ev.stopPropagation(); if (socket) socket.emit("guest mute", { room: currentRoomId, guestId: gid, muted: !hm }); }; })(seat.guestId, isHostMuted);
+            } else if (isMine) { // apni seat — khud mute kare (host-mute ho to band)
+              mute.classList.add("show"); mute.disabled = isHostMuted;
+              mute.onclick = function(ev){ if (ev) ev.stopPropagation(); toggleMyMic(); };
+            } else { // viewer — sirf indicator
+              mute.classList.toggle("show", isMuted); mute.disabled = true; mute.onclick = null;
+            }
+          }
           var av = tile.querySelector(".gavatar");
           var stream = guestStreamFor(seat, i); // v25: pehle stream, phir hasVideo (pehle ulta tha — galat tile audio banti thi)
           var hasVideo = stream && stream.getVideoTracks().length > 0;
@@ -1847,6 +1882,7 @@
         if (guestPC) { try { guestPC.close(); } catch(e){} guestPC = null; }
         if (guestStream) { guestStream.getTracks().forEach(function(t){ try { t.stop(); } catch(e){} }); guestStream = null; }
         myGuestSeat = 0; guestHostId = null; guestRequested = false;
+        myMicMuted = false; hostMutedMe = false; applyMyMic(); // v31: seat gayi — mute reset
         renderGuestBtn();
         renderGuestTiles();
       }
@@ -2209,6 +2245,7 @@
           myGuestSeat = d.seat || 0;
           guestHostId = d.hostId || null;
           guestRequested = false;
+          myMicMuted = false; hostMutedMe = false; // v31: nayi seat — mute reset
           renderGuestBtn();
           renderGuestTiles();
           (room && room.data && room.data.mode === 'audio' ? startMic() : startCamera()).then(function(stream){
@@ -2251,6 +2288,13 @@
           if (!d || d.room !== currentRoomId) return;
           roomSeats = d.seats || [];
           if (room && room.isHost) reconcileGuestPCs();
+          renderGuestTiles();
+        });
+        s.on("guest mute", function(d){ // v31: host ne mute/unmute kiya
+          if (!d || !room || room.isHost) return;
+          hostMutedMe = !!d.muted;
+          applyMyMic();
+          toast(d.muted ? "The host muted you." : "The host unmuted you.");
           renderGuestTiles();
         });
         s.on("guest offer", function(d){
@@ -2350,6 +2394,7 @@
         var badgeTxt = $("viewerLiveBadge").querySelector("span:last-child"); // v29: mode ka sahi naam
         if (badgeTxt) badgeTxt.textContent = "LIVE · " + (room.data && room.data.mode === 'audio' ? "Audio only" : room.data && room.data.mode === 'multi' ? "Multi-guest" : "Real video");
         $("themeBtn").style.display = (room.data && room.data.mode === 'video') ? "none" : ""; // v29: plain LIVE mein background nahi
+        hostMicMuted = false; var _hmb = $("hostMicBtn"); if (_hmb) _hmb.textContent = "Mic Off"; // v31
         if (room.data && room.data.mode === 'audio') {
           setAvatar($("audioHostAv"), (room.data && room.data.hostAvatar) || (room.isHost && lastProfile ? lastProfile.avatar : ""), host.charAt(0));
           $("audioHostName").textContent = host;
@@ -2729,6 +2774,13 @@
       $("pkAcceptBtn").addEventListener("click", function(){ if (socket && pkInviteFrom) socket.emit("pk accept", { fromRoom: pkInviteFrom }); $("pkInvite").classList.remove("show"); clearTimeout(pkInviteTimer); pkInviteFrom = null; }); // v28
       $("pkRejectBtn").addEventListener("click", function(){ if (socket && pkInviteFrom) socket.emit("pk reject", { fromRoom: pkInviteFrom }); $("pkInvite").classList.remove("show"); clearTimeout(pkInviteTimer); pkInviteFrom = null; }); // v28
       $("pkResultCloseBtn").addEventListener("click", function(){ $("pkResult").classList.remove("show"); }); // v28
+      $("hostMicBtn").addEventListener("click", function(){ // v31: host khud ko mute kare
+        var tr = localStream && localStream.getAudioTracks()[0];
+        if (!tr) { toast("Mic is not on."); return; }
+        hostMicMuted = !hostMicMuted;
+        tr.enabled = !hostMicMuted;
+        this.textContent = hostMicMuted ? "Mic On" : "Mic Off";
+      });
       $("themeBtn").addEventListener("click", function(){ renderThemeGrid(); $("themeTray").classList.toggle("open"); }); // v26
       $("themeTrayX").addEventListener("click", function(){ $("themeTray").classList.remove("open"); }); // v30: tray band karein
       $("musicTrayX").addEventListener("click", function(){ $("musicTray").classList.remove("open"); }); // v30
