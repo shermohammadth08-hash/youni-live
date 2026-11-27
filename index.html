@@ -473,9 +473,10 @@
       .pp-btn.gold { background: #b8860b; border-color: transparent; }
       .watcher-row { cursor: pointer; }
       .seat-num { min-width: 28px; height: 28px; padding: 0 .35rem; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.1); color: #fff; font-size: .8rem; cursor: pointer; }
+      .seat-num.wanted { background: #b8860b; border-color: #ffd700; color: #fff; font-weight: 800; } /* v35: guest ki maangi hui seat sunehri */
       .host-pill .avatar, #audioHostAv { cursor: pointer; }
       .pp-card { position: relative; }
-      .pp-manage { position: absolute; top: .5rem; right: .6rem; width: 30px; height: 30px; border-radius: 50%; border: none; background: rgba(255,255,255,.1); color: #fff; font-size: 1.1rem; line-height: 1; cursor: pointer; } /* v34: profile ke kone par Manage */
+      .pp-manage { position: absolute; top: .5rem; right: .6rem; height: 30px; padding: 0 .7rem; border-radius: 15px; border: none; background: #b8860b; color: #fff; font-size: .82rem; font-weight: 700; line-height: 1; cursor: pointer; } /* v35: Manage button bara aur saaf — sunehra pill */
       .pp-info { font-size: .75rem; opacity: .7; margin: .1rem 0 .4rem; }
       .round-btn.guest-on { background: #e8334d; color: #fff; }
       .guest-reqs { border-top: 1px solid rgba(255,255,255,.15); margin-top: .5rem; padding-top: .5rem; }
@@ -1020,6 +1021,7 @@
         <div class="bg-theme" id="roomBgTheme"></div>
         <video class="room-video" id="roomVideo" autoplay playsinline muted></video>
         <audio id="roomAudio" autoplay playsinline style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></audio> <!-- v34: audio room mein host ki awaz -->
+        <div id="guestAudioWrap" aria-hidden="true" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden"></div> <!-- v35: audio room mein guest ki awaz — chhupa audio element, display:none nahi -->
         <video id="pkVideo" autoplay playsinline></video>
         <div id="pkBar"><div class="pk-row"><div class="pk-side"><b id="pkNameA">A</b><span id="pkScoreA">0</span></div><div class="pk-mid" id="pkTimer">5:00</div><div class="pk-side right"><span id="pkScoreB">0</span><b id="pkNameB">B</b></div></div><div class="pk-track"><div class="pk-fill" id="pkFill"></div></div></div>
         <div id="pkInvite"><h3 style="margin:.2rem 0 .6rem">PK Battle request</h3><p style="margin:.2rem 0 .8rem"><b id="pkInviteName">A host</b> challenges you to a PK!</p><div style="display:flex;gap:.6rem;justify-content:center"><button class="btn-cam" id="pkAcceptBtn" type="button">Accept</button><button class="btn-cam" id="pkRejectBtn" type="button">Reject</button></div></div>
@@ -1135,7 +1137,7 @@
         <!-- v32: Profile popup — kisi ki profile par tap karein to options -->
         <div class="profile-pop" id="profilePop">
           <div class="pp-card">
-            <button class="pp-manage" id="ppManage" type="button" aria-label="Manage">⋯</button>
+            <button class="pp-manage" id="ppManage" type="button" aria-label="Manage">⋯ Manage</button>
             <div class="pp-av" id="ppAvatar">?</div>
             <div class="pp-name" id="ppName"></div>
             <div class="pp-tag" id="ppTag"></div>
@@ -1880,6 +1882,27 @@
         if (seat.seat === myGuestSeat) return guestStream; // apni video local dikhayein
         return viewerStreams[orderIdx + 1] || null; // host = index 0, phir guests seq order mein
       }
+      function syncGuestAudio(){ // v35: audio room mein guest ki awaz — tile ki video display:none hoti hai, is liye alag audio element
+        var wrap = $("guestAudioWrap"); if (!wrap) return;
+        var isAudio = !!(room && room.data && room.data.mode === 'audio');
+        if (!isAudio || !room || !currentRoomId) { wrap.innerHTML = ""; return; }
+        var ordered = seatsSorted();
+        var live = {};
+        for (var j = 0; j < ordered.length; j++) {
+          var seat = ordered[j]; if (!seat) continue;
+          var stream = guestStreamFor(seat, j);
+          if (!stream || !stream.getAudioTracks || !stream.getAudioTracks().length) continue;
+          live[seat.guestId] = true;
+          var el = wrap.querySelector('audio[data-gid="' + seat.guestId + '"]');
+          if (!el) { el = document.createElement("audio"); el.setAttribute("data-gid", seat.guestId); el.autoplay = true; el.playsInline = true; wrap.appendChild(el); }
+          if (el.srcObject !== stream) el.srcObject = stream;
+          el.muted = !!(seat.muted) || (!room.isHost && seat.seat === myGuestSeat); // apni seat / muted guest — khamosh
+          el.play().catch(function(){});
+        }
+        Array.prototype.slice.call(wrap.querySelectorAll("audio")).forEach(function(el){
+          if (!live[el.getAttribute("data-gid")]) el.remove();
+        });
+      }
       function renderGuestTiles(){
         var wrap = $("guestTiles"); if (!wrap) return;
         var isAudio = !!(room && room.data && room.data.mode === 'audio'); // v25: audio room = 8 seats
@@ -1898,7 +1921,7 @@
           var seat = ordered[i] || null;
           var vid = tile.querySelector("video");
           var nm = tile.querySelector(".gname");
-          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; var _m = tile.querySelector(".gmute"); if (_m) { _m.classList.remove("show"); _m.onclick = null; } tile.onclick = null; var guestsOn = room && room.data && room.data.multiGuest !== false && room.data.mode !== 'video'; if (isAudio) { tile.classList.add("empty"); nm.textContent = ""; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } else { tile.onclick = (function(sn){ return function(){ openInvitePicker(sn); }; })(i + 1); } } else if (guestsOn) { tile.classList.add("empty"); nm.textContent = room.isHost ? "Empty seat" : "+ Join"; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } else { tile.onclick = (function(sn){ return function(){ openInvitePicker(sn); }; })(i + 1); } } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
+          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; var _m = tile.querySelector(".gmute"); if (_m) { _m.classList.remove("show"); _m.onclick = null; } tile.onclick = null; var guestsOn = room && room.data && room.data.multiGuest !== false && room.data.mode !== 'video'; if (isAudio) { tile.classList.add("empty"); nm.textContent = ""; if (!room.isHost) { tile.onclick = (function(sn){ return function(){ requestGuest(sn); }; })(i + 1); } else { tile.onclick = (function(sn){ return function(){ openInvitePicker(sn); }; })(i + 1); } } else if (guestsOn) { tile.classList.add("empty"); nm.textContent = room.isHost ? "Empty seat" : "+ Join"; if (!room.isHost) { tile.onclick = (function(sn){ return function(){ requestGuest(sn); }; })(i + 1); } else { tile.onclick = (function(sn){ return function(){ openInvitePicker(sn); }; })(i + 1); } } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
           tile.classList.add("on"); tile.classList.remove("empty"); tile.onclick = null;
           var mute = tile.querySelector(".gmute"); // v31: mute button / indicator
           if (mute) {
@@ -1926,12 +1949,13 @@
             else { av.innerHTML = ""; av.textContent = (seat.name || "G").charAt(0); }
           }
           nm.textContent = seat.name || "Guest";
-          vid.muted = (!room.isHost && seat.seat === myGuestSeat); // v24: apni tile muted (echo na ho), baaki sab ki awaz aaye
+          vid.muted = isAudio ? true : (!room.isHost && seat.seat === myGuestSeat); // v35: audio room mein tile video khamosh — awaz guestAudio se aaye
           if (stream && vid.srcObject !== stream) { vid.srcObject = stream; vid.play().catch(function(){}); }
           else if (stream) { vid.play().catch(function(){}); }
           else if (!stream && vid.srcObject) { vid.srcObject = null; }
           tile.onclick = function(){ openUserProfile({ name: seat.name, guestId: seat.guestId, seat: seat.seat, avatar: seat.avatar || "", isAdmin: isRoomAdminName(seat.name), isHost: false }); }; // v32: tile par tap — profile popup (kick ab profile mein hai)
         }
+        syncGuestAudio(); // v35: audio room mein guest ki awaz
       }
       function renderGuestBtn(){
         var b = $("guestBtn"); if (!b) return;
@@ -1941,15 +1965,15 @@
         if (myGuestSeat) { b.classList.add("guest-on"); b.setAttribute("aria-label", "Leave guest seat"); }
         else { b.classList.remove("guest-on"); b.setAttribute("aria-label", guestRequested ? "Guest request sent" : "Join as guest"); }
       }
-      function requestGuest(){
+      function requestGuest(seat){ // v35: seat par tap — wahi seat maangein
         if (!room || room.isHost || myGuestSeat || guestRequested) return;
         if (!currentUser) { toast("Log in first to join as guest."); return; }
         var s = connectSocket();
         if (!s || !currentRoomId) return;
         guestRequested = true;
         renderGuestBtn();
-        s.emit("guest request", { room: currentRoomId, name: myName() });
-        toast("Guest request sent to host.");
+        s.emit("guest request", { room: currentRoomId, name: myName(), seat: seat || 0 });
+        toast(seat ? ("Seat " + seat + " requested — waiting for host.") : "Guest request sent to host.");
       }
       function leaveGuest(){
         var s = connectSocket();
@@ -1990,14 +2014,14 @@
           var row = document.createElement("div");
           row.className = "watcher-row";
           var nm = document.createElement("span");
-          nm.className = "wname"; nm.textContent = r.name;
+          nm.className = "wname"; nm.textContent = r.name + (r.seat ? (" · wants seat " + r.seat) : ""); // v35: maangi hui seat dikhe
           row.appendChild(nm);
           var count = (room && room.data && room.data.mode === 'audio') ? 8 : 4; // v32: host seat chune
           for (var s = 1; s <= count; s++) {
             if (roomSeats.some(function(x){ return x && x.seat === s; })) continue; // bhari seat
             (function(seatNo){
               var b = document.createElement("button");
-              b.type = "button"; b.className = "seat-num"; b.textContent = seatNo; b.title = "Seat " + seatNo;
+              b.type = "button"; b.className = "seat-num" + (r.seat === seatNo ? " wanted" : ""); b.textContent = seatNo; b.title = "Seat " + seatNo + (r.seat === seatNo ? " (requested)" : ""); // v35: maangi seat sunehri
               b.addEventListener("click", function(){ approveGuest(r.guestId, r.name, seatNo); });
               row.appendChild(b);
             })(s);
@@ -2322,9 +2346,9 @@
         s.on("guest request", function(d){
           if (!room || !room.isHost || !myLiveRoomId || !d || d.room !== myLiveRoomId) return;
           if (guestRequests.some(function(r){ return r.guestId === d.guestId; })) return;
-          guestRequests.push({ guestId: d.guestId, name: d.name || "Guest" });
+          guestRequests.push({ guestId: d.guestId, name: d.name || "Guest", seat: d.seat || 0 }); // v35: guest ne konsi seat maangi
           renderGuestRequests();
-          toast((d.name || "Guest") + " wants to join as guest");
+          toast((d.name || "Guest") + (d.seat ? (" wants seat " + d.seat) : " wants to join as guest"));
         });
         s.on("guest approved", function(d){
           if (!d || d.room !== currentRoomId) return;
@@ -2554,6 +2578,7 @@
         room = null;
         viewerStreams = []; // v20
         roomSeats = []; // v20
+        var _gaw = $("guestAudioWrap"); if (_gaw) _gaw.innerHTML = ""; // v35: guest audio saaf karein
         guestRequests = []; // v20
         renderGuestTiles(); // v20
         renderGuestRequests(); // v20

@@ -1117,7 +1117,10 @@ io.on("connection", (sock) => {
     if (isKickedFromRoom(roomId, name)) { sock.emit("guest request failed", { room: roomId, reason: "kicked" }); return; } // v34
     if (seatsFor(roomId).some((x) => x && x.guestId === sock.id)) return; // pehle se guest hai
     if (seatsFor(roomId).every(Boolean)) { sock.emit("guest request failed", { room: roomId, reason: "full" }); return; }
-    io.to(live.hostId).emit("guest request", { room: roomId, guestId: sock.id, name: name });
+    const seatsNow = seatsFor(roomId); // v35: guest ne konsi seat maangi (khaali ho to)
+    const wantSeat = parseInt(data.seat, 10);
+    const reqSeat = (wantSeat >= 1 && wantSeat <= seatsNow.length && !seatsNow[wantSeat - 1]) ? wantSeat : 0;
+    io.to(live.hostId).emit("guest request", { room: roomId, guestId: sock.id, name: name, seat: reqSeat });
   });
 
   sock.on("guest approve", (data) => {
