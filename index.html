@@ -1538,6 +1538,7 @@
       var localStream = null;
       var hostPCs = {};        // watcherId -> RTCPeerConnection (host side)
       var watchers = {};       // v8: watcherId -> name (host ke live view ke liye)
+      var pendingWatchers = {}; // v40: watcher stream se pehle aaya — PC baad mein banega
       var viewerPC = null;     // viewer side
       /* v20: Multi-guest live — 1 host + 4 guests */
       var guestPCs = {};       // host side: guestId -> RTCPeerConnection (guest ki video lene ke liye)
@@ -1614,11 +1615,11 @@
         var q = videoQuality();
         if (q === "high") { video.width = { ideal: 1280 }; video.height = { ideal: 720 }; }
         else if (q === "medium") { video.width = { ideal: 640 }; video.height = { ideal: 480 }; }
-        return navigator.mediaDevices.getUserMedia({ video: video, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); // v36: echo khatam
+        return navigator.mediaDevices.getUserMedia({ video: video, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } }); // v40: AGC band — awaz tez/speaker jaisi ho jati thi
       }
       function startMic(){ // v23: Audio LIVE — sirf mic, camera nahi
         if (!camAvailable()) return Promise.reject(new Error("nocam"));
-        return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); // v36: echo khatam — do phone paas hon to awaz ghumti hai
+        return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } }); // v40: AGC band — awaz tez/speaker jaisi ho jati thi
       }
       function stopCamera(){
         if (localStream) { localStream.getTracks().forEach(function(t){ t.stop(); }); localStream = null; }
@@ -1628,6 +1629,32 @@
       }
       function closeHostPCs(){
         Object.keys(hostPCs).forEach(function(id){ closePCFor(id); });
+      }
+      function createHostPCFor(watcherId){ // v40: host ki taraf se viewer ko PC + offer (awaz + video)
+        if (!myLiveRoomId || !localStream) return;
+        var s = connectSocket(); if (!s) return;
+        closePCFor(watcherId);
+        var pc = new RTCPeerConnection(RTC_CONF);
+        hostPCs[watcherId] = pc;
+        localStream.getTracks().forEach(function(t){ if (t.kind === 'video') pc.addTrack(t, localStream); });
+        var at = currentAudioTrack(); if (at) pc.addTrack(at, localStream); // v24: music on ho to mixed awaz
+        if (pkInfo && pkOpponentStream) sendPkToViewer(watcherId); // v28: PK mein naya viewer — opponent ki video bhi
+        seatsSorted().forEach(function(seat){ // v20: maujooda guests ki video bhi naye viewer ko (apni khud ki nahi)
+          if (seat.guestId === watcherId) return;
+          var gt0 = guestTracks[seat.guestId];
+          if (gt0) forwardGuestToPC(pc, watcherId, seat.guestId, gt0);
+        });
+        pc.onicecandidate = function(e){
+          if (e.candidate) s.emit("ice", { to: watcherId, room: myLiveRoomId, candidate: e.candidate });
+        };
+        pc.createOffer().then(function(offer){
+          return pc.setLocalDescription(offer);
+        }).then(function(){
+          s.emit("offer", { to: watcherId, room: myLiveRoomId, sdp: pc.localDescription });
+        }).catch(function(){ closePCFor(watcherId); });
+      }
+      function flushPendingWatchers(){ // v40: jo watcher stream se pehle aaye the, un ko PC do
+        Object.keys(pendingWatchers).forEach(function(wid){ delete pendingWatchers[wid]; createHostPCFor(wid); });
       }
       function closeViewerPC(){
         if (viewerPC) { try { viewerPC.close(); } catch (e) {} viewerPC = null; }
@@ -1757,6 +1784,7 @@
         stopHostAudio(); // v34: video mein awaz roomVideo se aati hai — double na ho
         var v = $("roomVideo");
         v.muted = !!muted;
+        v.volume = 0.6; // v40: awaz itni tez na ho (speaker jaisi)
         v.srcObject = stream;
         v.classList.add("show");
         roomBgHide(); // v26
@@ -1770,8 +1798,14 @@
       function playHostAudio(stream){ // v34: host ki awaz — audio room + camera-off mein roomVideo nahi chalta, is liye alag audio element
         var a = $("roomAudio"); if (!a || !stream) return;
         if (stream.getAudioTracks().length === 0) return;
-        if (a.srcObject !== stream) { a.srcObject = stream; a.play().catch(function(){}); }
+        if (a.srcObject !== stream) a.srcObject = stream;
+        a.volume = 0.6; // v40: awaz itni tez na ho (speaker jaisi)
+        if (a.paused) a.play().catch(function(){}); // v40: pehli play fail ho to dobara — kabhi awaz na aane ki wajah
       }
+      document.addEventListener("pointerdown", function(){ // v40: screen par tap ho to ruki hui awaz dobara chalu karein
+        var a = $("roomAudio");
+        if (a && a.paused && a.srcObject && a.srcObject.getAudioTracks().length) a.play().catch(function(){});
+      });
       function stopHostAudio(){ var a = $("roomAudio"); if (a) { try { a.pause(); } catch(e){} a.srcObject = null; } }
       function showAudioHost(stream){ // v23: audio room — cover background + LIVE badge, video nahi
         $("viewerLiveBadge").classList.add("show");
@@ -1901,6 +1935,7 @@
           var el = wrap.querySelector('audio[data-gid="' + seat.guestId + '"]');
           if (!el) { el = document.createElement("audio"); el.setAttribute("data-gid", seat.guestId); el.autoplay = true; el.playsInline = true; wrap.appendChild(el); }
           if (el.srcObject !== stream) el.srcObject = stream;
+          el.volume = 0.6; // v40: guest ki awaz bhi halki
           el.muted = !!(seat.muted) || (!room.isHost && seat.seat === myGuestSeat); // apni seat / muted guest — khamosh
           el.play().catch(function(){});
         }
@@ -2249,28 +2284,8 @@
         s.on("watcher", function(d){
           if (!myLiveRoomId || !d || d.room !== myLiveRoomId) return;
           if (d.name) { watchers[d.watcherId] = d.name; renderWatcherList(); } // v29: list pehle — stream ho ya na ho
-          if (!localStream) return; // video/audio abhi nahi — PC baad mein (jab stream aaye, naya watcher dobara aayega)
-          // v8: watcher list (upar)
-          closePCFor(d.watcherId);
-          var pc = new RTCPeerConnection(RTC_CONF);
-          hostPCs[d.watcherId] = pc;
-          localStream.getTracks().forEach(function(t){ if (t.kind === 'video') pc.addTrack(t, localStream); });
-          var at = currentAudioTrack(); if (at) pc.addTrack(at, localStream); // v24: music on ho to mixed awaz
-          if (pkInfo && pkOpponentStream) sendPkToViewer(d.watcherId); // v28: PK mein naya viewer — opponent ki video bhi
-          // v20: maujooda guests ki video bhi naye viewer ko (apni khud ki nahi)
-          seatsSorted().forEach(function(seat){
-            if (seat.guestId === d.watcherId) return;
-            var gt0 = guestTracks[seat.guestId];
-            if (gt0) forwardGuestToPC(pc, d.watcherId, seat.guestId, gt0);
-          });
-          pc.onicecandidate = function(e){
-            if (e.candidate) s.emit("ice", { to: d.watcherId, room: myLiveRoomId, candidate: e.candidate });
-          };
-          pc.createOffer().then(function(offer){
-            return pc.setLocalDescription(offer);
-          }).then(function(){
-            s.emit("offer", { to: d.watcherId, room: myLiveRoomId, sdp: pc.localDescription });
-          }).catch(function(){ closePCFor(d.watcherId); });
+          if (!localStream) { pendingWatchers[d.watcherId] = true; return; } // v40: stream abhi nahi — PC baad mein banega, watcher zaya nahi hoga
+          createHostPCFor(d.watcherId); // v40: PC banana alag function mein
         });
         // Viewer side: host ki offer mili — answer bhejein
         s.on("offer", function(d){
@@ -2845,6 +2860,7 @@
         (liveMode === 'audio' ? startMic() : startCamera()).then(function(stream){
           btn.disabled = false;
           localStream = stream;
+          flushPendingWatchers(); // v40: jo watcher stream se pehle aaye the
           var liveRoomId = "live-" + myName().toLowerCase().replace(/[^a-z0-9]/g, "");
           myLiveRoomId = liveRoomId;
           room = {
