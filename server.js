@@ -833,10 +833,16 @@ function roomViewerCount(roomId){ // v45: sirf naam wale viewers ginain — eye 
 function broadcastViewers(roomId){ // v29
   if (!liveRooms[roomId]) return;
   var list = []; // v44: viewers ke naam bhi — host ki "Viewers in your live" list khud theek ho jaye
+  var users = loadUsers(); // v49: Bigo-style tray — avatar + level + XP bhi bhejein
   for (const [, s] of io.sockets.sockets) {
     if (s.rooms.has(roomId) && s.id !== liveRooms[roomId].hostId) {
       var nm = (s.data && s.data.userName) || "";
-      if (nm) list.push({ id: s.id, name: nm });
+      if (nm) {
+        var key = findUserKey(users, nm);
+        var xp = (key && users[key].xp) || 0;
+        var av = (key && users[key].avatar) || "";
+        list.push({ id: s.id, name: nm, avatar: av, level: levelFor(xp), xp: xp });
+      }
     }
   }
   io.to(roomId).emit("viewers", { room: roomId, count: roomViewerCount(roomId), viewers: list });

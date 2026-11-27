@@ -664,7 +664,20 @@
       /* ---------- v8: Report / Block ---------- */
       .who-click { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 
-      .watcher-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .32rem 0; font-size: .83rem; }
+      .watcher-row { display: flex; align-items: center; gap: .6rem; padding: .45rem 0; font-size: .85rem; } /* v49: Bigo-style row — photo + naam + level + XP bar */
+      /* v49: Bigo-style viewers tray — safed panel, photo + naam + level + XP bar */
+      #viewersTray { background: #fff; color: #1a1a1a; max-height: 72dvh; }
+      #viewersTray h3 { color: #1a1a1a; }
+      #viewersTray .tray-x { color: #333; border-color: rgba(0,0,0,.25); }
+      #viewersTrayList { max-height: 56dvh; overflow-y: auto; padding-right: .2rem; }
+      #viewersTrayList .avatar { width: 2.4rem; height: 2.4rem; font-size: .95rem; background: linear-gradient(135deg, #7c5cff, #e8334d); }
+      #viewersTrayList .winfo { flex: 1; min-width: 0; }
+      #viewersTrayList .wname-row { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+      #viewersTrayList .wname { color: #1a1a1a; font-weight: 700; min-width: 0; }
+      #viewersTrayList .wlevel { font-size: .68rem; font-weight: 800; color: #8a6d00; background: #fff3cd; border: 1px solid #f0d48a; border-radius: 999px; padding: .1rem .45rem; white-space: nowrap; }
+      #viewersTrayList .wtag { font-size: .7rem; color: #999; white-space: nowrap; }
+      #viewersTrayList .wxpbar { height: 4px; background: #f3d7db; border-radius: 999px; margin-top: .28rem; overflow: hidden; }
+      #viewersTrayList .wxpfill { height: 100%; background: linear-gradient(90deg, #ff5e78, #e8334d); border-radius: 999px; }
       .watcher-row .wname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .watcher-block {
         border: none; background: var(--brand); color: #fff; font-weight: 800; font-size: .74rem;
@@ -1102,7 +1115,7 @@
           <div class="gift-grid" id="giftGrid"></div>
         <div class="gift-tray" id="viewersTray">
           <button class="tray-x" id="viewersTrayX" type="button" aria-label="Close">✕</button>
-          <h3>Viewers</h3>
+          <h3>Viewers <span id="viewersTrayCount">0</span></h3>
           <div id="viewersTrayList"></div>
         </div>
         </div>
@@ -2251,7 +2264,7 @@
         });
         s.on("user blocked", function(d){
           if (d && d.target) {
-            Object.keys(watchers).forEach(function(id){ if (watchers[id] === d.target) delete watchers[id]; });
+            Object.keys(watchers).forEach(function(id){ if (watchers[id] && watchers[id].name === d.target) delete watchers[id]; });
             renderWatcherList();
             toast("Blocked " + d.target);
           }
@@ -2266,11 +2279,11 @@
           if (d.viewers) { // v48: eye icon wali viewers list — host aur guest dono ko naam dikhein
             if (room.isHost) { // v44: host ki list — naam jodte jayein
               var _chg = false;
-              d.viewers.forEach(function(v){ if (v && v.id && v.name && !watchers[v.id]) { watchers[v.id] = v.name; _chg = true; } });
+              d.viewers.forEach(function(v){ if (v && v.id && v.name) { watchers[v.id] = { name: v.name, avatar: v.avatar || "", level: v.level || 0, xp: v.xp || 0 }; _chg = true; } });
               if (_chg) renderWatcherList();
             } else { // guest: server ki list se sync karein (naam hatayein jo chale gaye)
               var _nv = {};
-              d.viewers.forEach(function(v){ if (v && v.id && v.name) _nv[v.id] = v.name; });
+              d.viewers.forEach(function(v){ if (v && v.id && v.name) _nv[v.id] = { name: v.name, avatar: v.avatar || "", level: v.level || 0, xp: v.xp || 0 }; });
               watchers = _nv;
               renderWatcherList();
             }
@@ -2278,7 +2291,7 @@
         });
         s.on("watcher", function(d){
           if (!myLiveRoomId || !d || d.room !== myLiveRoomId) return;
-          if (d.name) { watchers[d.watcherId] = d.name; renderWatcherList(); } // v29: list pehle — stream ho ya na ho
+          if (d.name) { watchers[d.watcherId] = { name: d.name, avatar: "", level: 0, xp: 0 }; renderWatcherList(); } // v29: list pehle — stream ho ya na ho
           if (!localStream) { pendingWatchers[d.watcherId] = true; return; } // v40: stream abhi nahi — PC baad mein banega, watcher zaya nahi hoga
           createHostPCFor(d.watcherId); // v40: PC banana alag function mein
         });
@@ -3300,7 +3313,7 @@
         if (!nm || nm === "System") return;
         var seat = roomSeats.filter(function(x){ return x && x.name === nm; })[0] || null;
         var wid = null;
-        Object.keys(watchers).forEach(function(id){ if (watchers[id] === nm) wid = id; });
+        Object.keys(watchers).forEach(function(id){ if (watchers[id] && watchers[id].name === nm) wid = id; });
         openUserProfile({ name: nm, watcherId: wid, guestId: seat ? seat.guestId : null, seat: seat ? seat.seat : 0, avatar: seat ? seat.avatar : "", isAdmin: isRoomAdminName(nm), isHost: room && room.data && room.data.host === nm, isSelf: nm === myName() });
       }
       $("chatBox").addEventListener("click", function(e){
@@ -3353,22 +3366,44 @@
       // v32: Host ke live view mein watchers — sirf naam (Block button hata diya); tap par profile popup
       var roomAdmins = []; // v32: is room ke admins (names, lowercase)
       function isRoomAdminName(n){ return !!n && roomAdmins.some(function(a){ return (a || "").toLowerCase() === (n || "").toLowerCase(); }); }
-      function renderWatcherList(){ // v48: viewers list ab eye icon wali tray mein dikhti hai (inline panel khatam)
+      function renderWatcherList(){ // v49: Bigo-style viewers tray — photo + naam + level + XP bar
         var list = $("viewersTrayList"); if (!list) return;
+        var cnt = $("viewersTrayCount"); if (cnt) cnt.textContent = Object.keys(watchers).length;
         list.innerHTML = "";
         var ids = Object.keys(watchers);
-        if (!ids.length) { list.innerHTML = '<div style="font-size:.8rem;opacity:.75">No viewers yet.</div>'; return; }
+        if (!ids.length) { list.innerHTML = '<div style="font-size:.85rem;color:#888;padding:.4rem 0">No viewers yet.</div>'; return; }
         ids.forEach(function(id){
-          var name = watchers[id];
+          var w = watchers[id] || {};
+          var name = w.name || "";
           var seat = roomSeats.filter(function(x){ return x && x.guestId === id; })[0] || null;
           var row = document.createElement("div");
           row.className = "watcher-row";
+          var av = document.createElement("span");
+          av.className = "avatar";
+          setAvatar(av, w.avatar || "", (name || "?").charAt(0));
+          row.appendChild(av);
+          var info = document.createElement("div");
+          info.className = "winfo";
+          var nr = document.createElement("div");
+          nr.className = "wname-row";
           var nm = document.createElement("span");
-          nm.className = "wname"; nm.textContent = name + (seat ? " · Guest" : "") + (isRoomAdminName(name) ? " · Admin" : "");
-          row.appendChild(nm);
+          nm.className = "wname"; nm.textContent = name;
+          nr.appendChild(nm);
+          if (w.level) { var lv = document.createElement("span"); lv.className = "wlevel"; lv.textContent = "Lv. " + w.level; nr.appendChild(lv); }
+          var tag = (seat ? " · Guest" : "") + (isRoomAdminName(name) ? " · Admin" : "");
+          if (tag) { var tg = document.createElement("span"); tg.className = "wtag"; tg.textContent = tag; nr.appendChild(tg); }
+          info.appendChild(nr);
+          var bar = document.createElement("div");
+          bar.className = "wxpbar";
+          var fill = document.createElement("div");
+          fill.className = "wxpfill";
+          fill.style.width = ((w.xp || 0) % 100) + "%";
+          bar.appendChild(fill);
+          info.appendChild(bar);
+          row.appendChild(info);
           row.addEventListener("click", function(){
             $("viewersTray").classList.remove("open");
-            openUserProfile({ name: name, watcherId: id, guestId: seat ? seat.guestId : null, seat: seat ? seat.seat : 0, avatar: seat ? seat.avatar : "", isAdmin: isRoomAdminName(name), isHost: room && room.data && room.data.host === name, isSelf: name === myName() }); // v36: apni row ho to isSelf
+            openUserProfile({ name: name, watcherId: id, guestId: seat ? seat.guestId : null, seat: seat ? seat.seat : 0, avatar: w.avatar || (seat ? seat.avatar : ""), isAdmin: isRoomAdminName(name), isHost: room && room.data && room.data.host === name, isSelf: name === myName() }); // v36: apni row ho to isSelf
           });
           list.appendChild(row);
         });
