@@ -474,6 +474,9 @@
       .watcher-row { cursor: pointer; }
       .seat-num { min-width: 28px; height: 28px; padding: 0 .35rem; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.1); color: #fff; font-size: .8rem; cursor: pointer; }
       .host-pill .avatar, #audioHostAv { cursor: pointer; }
+      .pp-card { position: relative; }
+      .pp-manage { position: absolute; top: .5rem; right: .6rem; width: 30px; height: 30px; border-radius: 50%; border: none; background: rgba(255,255,255,.1); color: #fff; font-size: 1.1rem; line-height: 1; cursor: pointer; } /* v34: profile ke kone par Manage */
+      .pp-info { font-size: .75rem; opacity: .7; margin: .1rem 0 .4rem; }
       .round-btn.guest-on { background: #e8334d; color: #fff; }
       .guest-reqs { border-top: 1px solid rgba(255,255,255,.15); margin-top: .5rem; padding-top: .5rem; }
       .viewer-live-badge { position: relative; z-index: 3; margin: .45rem .85rem 0; display: none; align-items: center; gap: .35rem; font-size: .74rem; font-weight: 800; }
@@ -1016,6 +1019,7 @@
         <img class="bg-img" id="roomBg" alt="" />
         <div class="bg-theme" id="roomBgTheme"></div>
         <video class="room-video" id="roomVideo" autoplay playsinline muted></video>
+        <audio id="roomAudio" autoplay playsinline style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></audio> <!-- v34: audio room mein host ki awaz -->
         <video id="pkVideo" autoplay playsinline></video>
         <div id="pkBar"><div class="pk-row"><div class="pk-side"><b id="pkNameA">A</b><span id="pkScoreA">0</span></div><div class="pk-mid" id="pkTimer">5:00</div><div class="pk-side right"><span id="pkScoreB">0</span><b id="pkNameB">B</b></div></div><div class="pk-track"><div class="pk-fill" id="pkFill"></div></div></div>
         <div id="pkInvite"><h3 style="margin:.2rem 0 .6rem">PK Battle request</h3><p style="margin:.2rem 0 .8rem"><b id="pkInviteName">A host</b> challenges you to a PK!</p><div style="display:flex;gap:.6rem;justify-content:center"><button class="btn-cam" id="pkAcceptBtn" type="button">Accept</button><button class="btn-cam" id="pkRejectBtn" type="button">Reject</button></div></div>
@@ -1131,10 +1135,12 @@
         <!-- v32: Profile popup — kisi ki profile par tap karein to options -->
         <div class="profile-pop" id="profilePop">
           <div class="pp-card">
+            <button class="pp-manage" id="ppManage" type="button" aria-label="Manage">⋯</button>
             <div class="pp-av" id="ppAvatar">?</div>
             <div class="pp-name" id="ppName"></div>
             <div class="pp-tag" id="ppTag"></div>
-            <div id="ppButtons"></div>
+            <div class="pp-info" id="ppInfo"></div>
+            <div id="ppButtons" style="display:none"></div>
             <button class="pp-btn" id="ppClose" type="button">Close</button>
           </div>
         </div>
@@ -1451,6 +1457,7 @@
       function esc(s){ return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
       function realChatHTML(m){
         var liveTag = '<span style="background:#22c55e;color:#fff;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:5px;vertical-align:middle">LIVE</span>';
+        if (m.name === "System") return '<span style="opacity:.85;font-style:italic">' + esc(m.text) + '</span>'; // v34: sirf text — "System" naam na dikhe, tap par kuch na khule
         return '<span class="who who-click" data-name="' + esc(m.name) + '" style="color:' + nameColor(m.name) + '">' + esc(m.name) + '</span>' + esc(m.text) + liveTag;
       }
       function connectSocket(){
@@ -1618,6 +1625,7 @@
       function closeViewerPC(){
         if (viewerPC) { try { viewerPC.close(); } catch (e) {} viewerPC = null; }
         viewerStreams = []; // v20
+        stopHostAudio(); // v34
         renderGuestTiles(); // v20
         hideRoomVideo();
       }
@@ -1739,6 +1747,7 @@
       function roomBgShow(){ var mode = room && room.data ? room.data.mode : ""; if (mode === 'video') { roomBgHide(); return; } if (themeIsGradient(currentTheme)) { $("roomBg").style.display = "none"; $("roomBgTheme").style.display = "block"; } else { $("roomBgTheme").style.display = "none"; $("roomBg").style.display = "block"; } } // v30 FIX: block, "" nahi
       function roomBgHide(){ $("roomBg").style.display = "none"; $("roomBgTheme").style.display = "none"; }
       function showRoomVideo(stream, muted){
+        stopHostAudio(); // v34: video mein awaz roomVideo se aati hai — double na ho
         var v = $("roomVideo");
         v.muted = !!muted;
         v.srcObject = stream;
@@ -1751,8 +1760,15 @@
           v.play().catch(function(){});
         });
       }
-      function showAudioHost(){ // v23: audio room — cover background + LIVE badge, video nahi
+      function playHostAudio(stream){ // v34: host ki awaz — audio room + camera-off mein roomVideo nahi chalta, is liye alag audio element
+        var a = $("roomAudio"); if (!a || !stream) return;
+        if (stream.getAudioTracks().length === 0) return;
+        if (a.srcObject !== stream) { a.srcObject = stream; a.play().catch(function(){}); }
+      }
+      function stopHostAudio(){ var a = $("roomAudio"); if (a) { try { a.pause(); } catch(e){} a.srcObject = null; } }
+      function showAudioHost(stream){ // v23: audio room — cover background + LIVE badge, video nahi
         $("viewerLiveBadge").classList.add("show");
+        playHostAudio(stream); // v34 FIX: pehle stream attach hi nahi hoti thi — guest ko host ki awaz nahi jaati thi
       }
       var hostCamOn = true; // v23: host ka camera on/off (LIVE + Multi-guest LIVE)
       var roomCamOff = false; // v23: is room mein host ka camera off hai (viewer side)
@@ -1761,6 +1777,7 @@
         v.classList.remove("show");
         v.srcObject = null;
         roomBgShow(); // v26
+        playHostAudio(viewerStreams[0]); // v34: camera off ho to bhi host ki awaz aaye
       }
       function renderCamBtn(){
         var b = $("camToggleBtn"); if (!b) return;
@@ -2014,7 +2031,7 @@
             liveFeed[info.room] = {
               id: info.room, title: info.title || "Live", host: info.host || "Host",
               cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
-              color: "#7a4fd0", img: info.cover || "singer",
+              color: "#7a4fd0", img: info.cover || "singer", hostAvatar: info.hostAvatar || "",
               multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
             };
           });
@@ -2026,7 +2043,7 @@
           liveFeed[info.room] = {
             id: info.room, title: info.title || "Live", host: info.host || "Host",
             cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
-            color: "#7a4fd0", img: info.cover || "singer",
+            color: "#7a4fd0", img: info.cover || "singer", hostAvatar: info.hostAvatar || "",
             multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
           };
           renderHome();
@@ -2201,7 +2218,7 @@
                 };
               });
             }
-            if (viewerStreams[0] === stream) { if (roomCamOff) showHostAvatarView(); else if (stream.getVideoTracks().length > 0) showRoomVideo(stream, false); else showAudioHost(); } // host = pehli stream
+            if (viewerStreams[0] === stream) { if (roomCamOff) showHostAvatarView(); else if (stream.getVideoTracks().length > 0) showRoomVideo(stream, false); else showAudioHost(stream); } // host = pehli stream
             else renderGuestTiles(); // v20: guest ki stream
           };
           pc.onicecandidate = function(e){
@@ -2346,7 +2363,7 @@
         s.on("guest request failed", function(d){
           guestRequested = false;
           renderGuestBtn();
-          toast(d && d.reason === "full" ? "All guest seats are full." : d && d.reason === "off" ? "Multi-guest is off for this live." : "Could not join as guest.");
+          toast(d && d.reason === "full" ? "All guest seats are full." : d && d.reason === "off" ? "Multi-guest is off for this live." : d && d.reason === "kicked" ? "You were kicked from this live." : "Could not join as guest.");
         });
         s.on("guest removed", function(d){
           if (!d || d.room !== currentRoomId) return;
@@ -3159,8 +3176,9 @@
       }
       var userMenuFollowing = false;
       function openUserMenu(name){
+        if (!name || name === "System") return; // v33: System ka koi profile nahi — sheet kabhi na khule
         if (!currentUser) { toast("Log in first to block or report."); return; }
-        if (!name || name === myName()) { toast("This is you."); return; }
+        if (name === myName()) { toast("This is you."); return; }
         userMenuTarget = name;
         $("userMenuName").textContent = name;
         $("userReportName").textContent = name;
@@ -3192,10 +3210,17 @@
         $("userSheet").classList.remove("open");
         userMenuTarget = null;
       }
-      // Chat mein naam par tap — Block / Report menu
+      // v34: Chat mein naam par tap — profile popup (purani Block/Report sheet nahi)
+      function openChatProfile(nm){
+        if (!nm || nm === "System") return;
+        var seat = roomSeats.filter(function(x){ return x && x.name === nm; })[0] || null;
+        var wid = null;
+        Object.keys(watchers).forEach(function(id){ if (watchers[id] === nm) wid = id; });
+        openUserProfile({ name: nm, watcherId: wid, guestId: seat ? seat.guestId : null, seat: seat ? seat.seat : 0, avatar: seat ? seat.avatar : "", isAdmin: isRoomAdminName(nm), isHost: room && room.data && room.data.host === nm, isSelf: nm === myName() });
+      }
       $("chatBox").addEventListener("click", function(e){
         var t = e.target && e.target.closest ? e.target.closest(".who-click") : null;
-        if (t && t.getAttribute("data-name")) openUserMenu(t.getAttribute("data-name"));
+        if (t && t.getAttribute("data-name")) openChatProfile(t.getAttribute("data-name"));
       });
       $("userBlockBtn").addEventListener("click", function(){
         if (!userMenuTarget) return;
@@ -3276,20 +3301,39 @@
         else { av.innerHTML = ""; av.textContent = (t.name || "?").charAt(0); }
         $("ppName").textContent = t.name || "";
         $("ppTag").textContent = t.isSelf ? "You" : (t.isHost ? "Host" : (t.isAdmin ? "Admin" : (t.seat ? "Guest · Seat " + t.seat : "Viewer")));
+        $("ppInfo").textContent = "ID: —";
+        if (t.name) { // v34: profile info — ID + followers
+          fetch("/api/profile?name=" + encodeURIComponent(t.name) + "&viewer=" + encodeURIComponent(myName())).then(function(r){ return r.json(); }).then(function(d){
+            if (!d || !d.ok || ppTarget !== t) return;
+            var loc = (d.locationOn && (d.city || d.country)) ? ((d.city ? d.city + ", " : "") + d.country) : "Location hidden";
+            var status = d.online === true ? " · Online" : (d.lastActiveMin !== null && d.lastActiveMin !== undefined ? " · Last seen " + (d.lastActiveMin <= 0 ? "just now" : d.lastActiveMin < 60 ? d.lastActiveMin + " min ago" : Math.round(d.lastActiveMin / 60) + " h ago") : "");
+            $("ppInfo").textContent = "ID: " + d.id + " · " + loc + " · " + fmtFull(d.followers) + " followers" + status;
+          }).catch(function(){});
+        }
         var box = $("ppButtons"); box.innerHTML = "";
+        box.style.display = "none"; // v34: actions Manage (...) se khulte hain
+        var manageBtn = $("ppManage");
         function addBtn(label, cls, fn){
           var b = document.createElement("button");
           b.type = "button"; b.className = "pp-btn" + (cls ? " " + cls : ""); b.textContent = label;
           b.addEventListener("click", function(){ fn(); });
           box.appendChild(b);
         }
-        if (t.isSelf && room && room.isHost) { // host apni profile — mic on/off yahin (neeche se hata diya)
+        var hasActions = false;
+        if (t.isSelf && room && room.isHost) { // host apni profile — mic on/off seedha dikhe
+          hasActions = true;
+          box.style.display = "";
+          manageBtn.style.display = "none";
           addBtn(hostMicMuted ? "Mic On" : "Mic Off", "", function(){
             toggleHostMic();
             closeUserProfile();
             toast(hostMicMuted ? "Your mic is off." : "Your mic is on.");
           });
+        } else if (t.isSelf) { // apni profile (viewer) — koi action nahi
+          manageBtn.style.display = "none";
         } else if (room && (room.isHost || isRoomAdminName(myName()))) { // host ya admin — manage kare
+          hasActions = true;
+          manageBtn.style.display = "";
           if (t.seat) { // seated guest — mute
             var seat = roomSeats.filter(function(x){ return x && x.seat === t.seat; })[0];
             var hm = seat ? !!seat.hostMuted : false;
@@ -3313,12 +3357,25 @@
               closeUserProfile(); toast(t.isAdmin ? (t.name + " is no longer an admin.") : (t.name + " is now an admin."));
             });
           }
-        } else { // viewer — profile dekhe + follow kare
+        } else { // viewer — profile dekhe + follow/report kare
+          hasActions = true;
+          manageBtn.style.display = "";
           addBtn("Follow", "", function(){
             fetch("/api/follow", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), to: t.name }) })
               .then(function(r){ return r.json(); }).then(function(d){ if (d && d.ok) { toast("Following " + t.name); closeUserProfile(); } });
           });
+          addBtn("Report", "", function(){ // v34: report purani sheet se
+            closeUserProfile();
+            userMenuTarget = t.name;
+            $("userMenuName").textContent = t.name;
+            $("userReportName").textContent = t.name;
+            $("reportText").value = "";
+            $("userMenuView").style.display = "none";
+            $("userReportView").style.display = "";
+            $("userSheet").classList.add("open");
+          });
         }
+        manageBtn.onclick = function(){ if (hasActions) box.style.display = box.style.display === "none" ? "" : "none"; }; // v34: ⋯ dabayein to options khulein
         if (!t.avatar && t.name) { // profile photo load karein (agar ho)
           fetch("/api/profile?name=" + encodeURIComponent(t.name)).then(function(r){ return r.json(); }).then(function(d){
             if (d && d.ok && d.avatar && ppTarget === t) { var a2 = $("ppAvatar"); a2.innerHTML = '<img src="' + d.avatar + '" alt="" />'; }
