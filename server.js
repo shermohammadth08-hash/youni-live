@@ -749,6 +749,14 @@ function avatarFor(name){ // v24: user ki profile photo ka URL
     return (key && users[key].avatar) || "";
   } catch (e) { return ""; }
 }
+function idForUser(name){ // v53: user ki 9-digit ID (room header mein "ID: ..." dikhane ke liye)
+  if (!name) return "";
+  try { const users = loadUsers(); const key = findUserKey(users, name); return (key && users[key].id) || ""; } catch (e) { return ""; }
+}
+function levelForUser(name){ // v53: user ka level (XP se) — room info sheet mein Room level
+  if (!name) return 1;
+  try { const users = loadUsers(); const key = findUserKey(users, name); return levelFor(key ? users[key].xp : 0); } catch (e) { return 1; }
+}
 function seatCount(roomId){ // v25: audio room mein 8 seats, baaki mein 4
   return (liveRooms[roomId] && liveRooms[roomId].mode === 'audio') ? 8 : 4;
 }
@@ -872,7 +880,7 @@ function liveListFor(viewerName){
   return Object.keys(liveRooms)
     .filter((rid) => !roomHiddenFor(viewerName, liveRooms[rid].host))
     .map((rid) => {
-      const base = Object.assign({ room: rid, hostAvatar: avatarFor(liveRooms[rid].host), viewers: roomViewerCount(rid) }, liveRooms[rid]); // v29: asli viewer count
+      const base = Object.assign({ room: rid, hostAvatar: avatarFor(liveRooms[rid].host), hostIdNum: idForUser(liveRooms[rid].host), hostLevel: levelForUser(liveRooms[rid].host), viewers: roomViewerCount(rid) }, liveRooms[rid]); // v29: asli viewer count
       const pk = pkForRoom(rid); // v28: PK chal rahi ho to late joiner ko bhi pata chale
       if (pk) {
         const isA = pk.roomA === rid;
@@ -1023,7 +1031,7 @@ io.on("connection", (sock) => {
     const cat = typeof data.cat === "string" ? data.cat.slice(0, 20) : "Chat";
     const rawCover = typeof data.cover === "string" ? data.cover : "singer"; // v32: gallery DP (data URL) ya built-in cover
     const cover = (rawCover.startsWith("data:image/") && rawCover.length <= 200000) ? rawCover : (rawCover.length <= 30 ? rawCover : "singer");
-    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, theme: (typeof data.theme === "string" && data.theme.length <= 20) ? data.theme.slice(0, 20) : cover, multiGuest: data.multiGuest !== false, mode: typeof data.mode === "string" ? data.mode.slice(0, 10) : "video", cameraOn: true }; // v23, v26 theme
+    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, theme: (typeof data.theme === "string" && data.theme.length <= 20) ? data.theme.slice(0, 20) : cover, multiGuest: data.multiGuest !== false, mode: typeof data.mode === "string" ? data.mode.slice(0, 10) : "video", tag: "", cameraOn: true }; // v23, v26 theme
     if (!sock.data.userName) sock.data.userName = host;
     emitLiveStarted(Object.assign({ room: roomId, hostAvatar: avatarFor(host) }, liveRooms[roomId])); // v34: guest ko host ki photo dikhe
   });
@@ -1045,6 +1053,33 @@ io.on("connection", (sock) => {
     liveRooms[roomId].theme = cover;
     io.to(roomId).emit("room cover", { room: roomId, cover: cover });
     broadcastLiveList();
+  });
+  sock.on("room title", (data) => { // v53: host room ka title badle — sab ko dikhe + Home card update
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    if (!isHostOf(sock.id, roomId) || !liveRooms[roomId]) return;
+    const title = typeof data.title === "string" ? data.title.slice(0, 60).trim() : "";
+    if (!title) return;
+    liveRooms[roomId].title = title;
+    io.to(roomId).emit("room title", { room: roomId, title: title });
+    broadcastLiveList();
+  });
+  sock.on("room tag", (data) => { // v53: host room ka tag badle — sab ko dikhe
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    if (!isHostOf(sock.id, roomId) || !liveRooms[roomId]) return;
+    const tag = typeof data.tag === "string" ? data.tag.slice(0, 20).trim() : "";
+    liveRooms[roomId].tag = tag;
+    io.to(roomId).emit("room tag", { room: roomId, tag: tag });
+    broadcastLiveList();
+  });
+  sock.on("room announcement", (data) => { // v53: host ka elaan — room ki chat mein sab ko System line
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    if (!isHostOf(sock.id, roomId) || !liveRooms[roomId]) return;
+    const text = typeof data.text === "string" ? data.text.slice(0, 120).trim() : "";
+    if (!text) return;
+    emitChatToRoom(roomId, { name: "System", text: "📢 " + text });
   });
   sock.on("room theme", (data) => { // v26: host background badle — sab viewers ko batayein
     if (!data || typeof data !== "object") return;

@@ -391,7 +391,7 @@
       /* v28: PK Battle — split screen, score bar */
       /* v29: audio room — host circle + seats flow mein, chat un ke neeche (overlap khatam) */
       #roomView.audio-mode .room-top { order: 1; }
-      #roomView.audio-mode .room-title-bar { order: 2; }
+      #roomView.audio-mode .room-title-bar { order: 2; display: none; } /* v53: title ab room header mein dikhta hai */
       #roomView.audio-mode .viewer-live-badge { order: 3; }
       #roomView.audio-mode .live-timer { order: 4; }
       #roomView.audio-mode #audioHostCircle { position: static; transform: none; order: 5; margin: .25rem auto 0; }
@@ -668,6 +668,30 @@
       .watcher-row { display: flex; align-items: center; gap: .6rem; padding: .45rem 0; font-size: .85rem; } /* v49: Bigo-style row — photo + naam + level + XP bar */
       /* v49: Bigo-style viewers tray — safed panel, photo + naam + level + XP bar */
       #viewersTray { background: #fff; color: #1a1a1a; min-height: 62dvh; max-height: 72dvh; display: flex; flex-direction: column; } /* v52: bara panel - Bigo jaisa, chahe 1 viewer ho to bhi upar tak */
+      /* v53: Bigo jaisa room header (upar) + room info sheet (neeche se khule) */
+      .room-info-head { order: 0; display: flex; align-items: center; gap: .55rem; width: fit-content; max-width: 78%; background: rgba(10,10,16,.55); border: 0; border-radius: 999px; padding: .28rem .7rem .28rem .3rem; color: #fff; cursor: pointer; text-align: left; margin-bottom: .35rem; }
+      .rih-dp { width: 2.1rem; height: 2.1rem; border-radius: .5rem; overflow: hidden; flex-shrink: 0; background: #7a4fd0; }
+      .rih-dp img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .rih-text { display: flex; flex-direction: column; min-width: 0; }
+      .rih-title { font-weight: 700; font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; }
+      .rih-id { font-size: .72rem; opacity: .85; }
+      .rih-bolt { margin-left: auto; background: linear-gradient(135deg,#ffb020,#ff7a1a); color: #fff; border-radius: 50%; width: 1.9rem; height: 1.9rem; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+      #roomInfoTray { background: #fff; color: #1a1a1a; max-height: 78dvh; }
+      #roomInfoTray .rit-top { display: flex; gap: .8rem; align-items: flex-start; margin: .4rem 0 .9rem; }
+      .rit-dp { position: relative; width: 5.2rem; height: 5.2rem; border-radius: .9rem; overflow: hidden; flex-shrink: 0; background: #e9e4f5; }
+      .rit-dp img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .rit-dp #ritChangeDp { position: absolute; left: 0; right: 0; bottom: 0; border: 0; background: rgba(0,0,0,.55); color: #fff; font-size: .72rem; padding: .2rem 0; cursor: pointer; }
+      .rit-text { min-width: 0; flex: 1; padding-top: .2rem; }
+      .rit-title-row, .rit-id-row { display: flex; align-items: center; gap: .4rem; }
+      #ritTitle { font-weight: 800; font-size: 1.05rem; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 13rem; }
+      #ritEditTitle, #ritCopyId { border: 0; background: none; color: #1a1a1a; font-size: 1rem; cursor: pointer; padding: .1rem .25rem; }
+      #ritId { color: #555; font-size: .88rem; }
+      .rit-tag { display: inline-block; margin-top: .35rem; background: #efe9fb; color: #7a4fd0; border-radius: 999px; padding: .12rem .6rem; font-size: .75rem; font-weight: 700; }
+      .rit-rows { border-top: 1px solid #eee; }
+      .rit-row { display: flex; justify-content: space-between; align-items: center; width: 100%; border: 0; border-bottom: 1px solid #eee; background: none; color: #1a1a1a; font-size: .95rem; padding: .85rem .1rem; cursor: pointer; text-align: left; }
+      .rit-row .rit-val { color: #888; }
+      .rit-row .rit-val #ritLevel { color: #7a4fd0; font-weight: 700; margin-right: .3rem; }
+      .rit-boost { width: 100%; border: 0; border-radius: 999px; background: linear-gradient(90deg,#ffb020,#ff7a1a); color: #fff; font-size: 1.05rem; font-weight: 800; padding: .85rem 0; margin-top: 1rem; cursor: pointer; }
       #viewersTray h3 { color: #1a1a1a; }
       #viewersTray .tray-x { color: #333; border-color: rgba(0,0,0,.25); }
       #viewersTrayList { flex: 1; min-height: 0; overflow-y: auto; padding-right: .2rem; } /* v52: list poori tray bhare, zyada viewers hon to scroll */
@@ -1046,6 +1070,14 @@
         <div class="bg-shade"></div>
 
         <div id="roomScroll">
+        <button type="button" class="room-info-head" id="roomInfoHead" aria-label="Room info">
+          <span class="rih-dp"><img id="rihDpImg" alt="Room DP"></span>
+          <span class="rih-text">
+            <span class="rih-title" id="rihTitle">Live</span>
+            <span class="rih-id" id="rihId">ID: —</span>
+          </span>
+          <span class="rih-bolt" aria-hidden="true">⚡</span>
+        </button>
         <div class="room-top">
           <div class="host-pill">
             <span class="avatar" id="roomHostAvatar">A</span>
@@ -1120,6 +1152,29 @@
           <h3>Viewers <span id="viewersTrayCount">0</span></h3>
           <div id="viewersTrayList"></div>
         
+        </div>
+
+        <div class="gift-tray room-info-tray" id="roomInfoTray">
+          <button class="tray-x" id="roomInfoTrayX" type="button" aria-label="Close">✕</button>
+          <div class="rit-top">
+            <div class="rit-dp">
+              <img id="ritDpImg" alt="Room DP">
+              <button type="button" id="ritChangeDp">Change</button>
+            </div>
+            <div class="rit-text">
+              <div class="rit-title-row"><span id="ritTitle">Live</span><button type="button" id="ritEditTitle" aria-label="Edit title">✎</button></div>
+              <div class="rit-id-row"><span id="ritId">ID: —</span><button type="button" id="ritCopyId" aria-label="Copy ID">⧉</button></div>
+              <span class="rit-tag">Chai Live</span>
+            </div>
+          </div>
+          <div class="rit-rows">
+            <button type="button" class="rit-row" id="ritLevelRow"><span>Room level</span><span class="rit-val"><span id="ritLevel">Lv.1</span> ›</span></button>
+            <button type="button" class="rit-row" id="ritSettingsRow"><span>Room settings</span><span class="rit-val">›</span></button>
+            <button type="button" class="rit-row" id="ritTagRow"><span>Tag</span><span class="rit-val"><span id="ritTagVal">No tag</span> ›</span></button>
+            <button type="button" class="rit-row" id="ritAnnRow"><span>Announcement</span><span class="rit-val">›</span></button>
+          </div>
+          <button type="button" class="rit-boost" id="ritBoostBtn">⚡ Boost my room</button>
+          <input type="file" id="roomDpFile" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
         </div>
 
         <!-- v26: Theme — host background badle, sab ko dikhe -->
@@ -2146,7 +2201,7 @@
               cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
               color: "#7a4fd0", img: info.cover || "singer", hostAvatar: info.hostAvatar || "",
               multiGuest: info.multiGuest !== false, mode: info.mode || 'video',
-              theme: info.theme || "", cover: info.cover || "singer" // v37: host ka background guest ko bhi dikhe
+              theme: info.theme || "", cover: info.cover || "singer", hostIdNum: info.hostIdNum || "", hostLevel: info.hostLevel || 1, tag: info.tag || "" // v53: room header + info sheet
             };
           });
           Object.keys(liveFeed).forEach(function(k){ if (!keep[k]) delete liveFeed[k]; });
@@ -2498,6 +2553,20 @@
         s.on("room cover", function(d){ // v32: host ne room DP badli
           if (!d || !room || d.cover === undefined) return;
           currentTheme = d.cover; applyRoomTheme(d.cover);
+          if (room.data) room.data.cover = d.cover;
+          setRoomInfoDp(); // v53: header + sheet ki DP bhi badle
+        });
+        s.on("room title", function(d){ // v53: host ne title badla
+          if (!d || !room || d.title === undefined) return;
+          if (room.data) room.data.title = d.title;
+          $("roomTitleBar").textContent = d.title;
+          $("rihTitle").textContent = d.title;
+          $("ritTitle").textContent = d.title;
+        });
+        s.on("room tag", function(d){ // v53: host ne tag badla
+          if (!d || !room || d.tag === undefined) return;
+          if (room.data) room.data.tag = d.tag;
+          $("ritTagVal").textContent = d.tag || "No tag";
         });
         s.on("you were kicked", function(d){
           toast(d && d.message ? d.message : "The host removed you from this live.");
@@ -2591,6 +2660,10 @@
         applyRoomTheme(currentTheme);
         $("roomView").classList.toggle("room-multi", !!(room.data && room.data.mode === 'multi')); // v26
         $("roomTitleBar").textContent = title;
+        var _rih = $("rihDpImg"); if (_rih) _rih.src = img; // v53: room header DP
+        var _rihT = $("rihTitle"); if (_rihT) _rihT.textContent = title;
+        var _rihI = $("rihId"); if (_rihI) _rihI.textContent = "ID: " + ((room.isHost && lastProfile && lastProfile.id) ? lastProfile.id : ((room.data && room.data.hostIdNum) || host));
+        var _ritD = $("ritDpImg"); if (_ritD) _ritD.src = img;
         $("roomHostName").textContent = host;
         $("roomHostFollowers").textContent = followers + " followers";
         var av = $("roomHostAvatar");
@@ -2662,6 +2735,7 @@
         renderGuestTiles(); // v20
         renderGuestRequests(); // v20
         $("roomView").classList.remove("open");
+        $("roomInfoTray").classList.remove("open"); // v53: room info sheet band karein
         $("giftTray").classList.remove("open");
         $("musicTray").classList.remove("open"); // v24
         $("themeTray").classList.remove("open"); // v26
@@ -2791,7 +2865,7 @@
         setCoins(coins);
         $("giftTray").classList.toggle("open");
       });
-      $("roomBg").addEventListener("click", function(){ $("giftTray").classList.remove("open"); $("viewersTray").classList.remove("open"); });
+      $("roomBg").addEventListener("click", function(){ $("giftTray").classList.remove("open"); $("viewersTray").classList.remove("open"); $("roomInfoTray").classList.remove("open"); }); // v53: room info sheet bhi band ho
 
       /* ================= Go Live ================= */
       var chosenCover = "singer";
@@ -3027,6 +3101,97 @@
       $("pkTrayX").addEventListener("click", function(){ $("pkTray").classList.remove("open"); }); // v30
       $("giftTrayX").addEventListener("click", function(){ $("giftTray").classList.remove("open"); }); // v30
       function openViewersTray(){ $("viewersTray").classList.add("open"); try { renderWatcherList(); } catch(e){} } // v50: tray pehle khule, list baad mein — render fail ho bhi to tray khule
+      /* ============ Room info header + sheet (v53: Bigo jaisa room DP + title + ID) ============ */
+      function roomInfoData(){
+        if (!room || !room.data) return null;
+        var d = room.data;
+        var hostIdNum = "";
+        if (room.isHost && lastProfile && lastProfile.id) hostIdNum = String(lastProfile.id);
+        else if (d.hostIdNum) hostIdNum = String(d.hostIdNum);
+        var hostLevel = 1;
+        if (room.isHost && lastProfile && lastProfile.level) hostLevel = lastProfile.level;
+        else if (d.hostLevel) hostLevel = d.hostLevel;
+        return { title: d.title || "Live", host: d.host || "Host", cover: d.cover || d.theme || "singer", tag: d.tag || "", idNum: hostIdNum, level: hostLevel };
+      }
+      function setRoomInfoDp(){
+        var info = roomInfoData(); if (!info) return;
+        var src = coverSrc(info.cover);
+        var a = $("rihDpImg"); if (a) a.src = src;
+        var b = $("ritDpImg"); if (b) b.src = src;
+      }
+      function openRoomInfo(){
+        var info = roomInfoData(); if (!info) return;
+        setRoomInfoDp();
+        $("rihTitle").textContent = info.title;
+        $("rihId").textContent = "ID: " + (info.idNum || info.host);
+        $("ritTitle").textContent = info.title;
+        $("ritId").textContent = "ID: " + (info.idNum || info.host);
+        $("ritLevel").textContent = "Lv." + info.level;
+        $("ritTagVal").textContent = info.tag || "No tag";
+        $("roomInfoTray").classList.add("open");
+      }
+      $("roomInfoHead").addEventListener("click", openRoomInfo);
+      $("roomInfoTrayX").addEventListener("click", function(){ $("roomInfoTray").classList.remove("open"); });
+      $("ritChangeDp").addEventListener("click", function(){
+        if (!room || !room.isHost) { toast("Only the host can change the room DP."); return; }
+        $("roomDpFile").click();
+      });
+      $("roomDpFile").addEventListener("change", function(){
+        var f = this.files && this.files[0]; if (!f || !room || !room.isHost) return;
+        downscaleImageFile(f, 720, 0.75, function(dataUrl){
+          var s = connectSocket();
+          if (s) s.emit("room cover", { room: myLiveRoomId || currentRoomId, cover: dataUrl });
+          toast("Room DP updated.");
+        });
+        this.value = "";
+      });
+      $("ritEditTitle").addEventListener("click", function(){
+        if (!room || !room.isHost) { toast("Only the host can change the title."); return; }
+        var info = roomInfoData(); if (!info) return;
+        var t = prompt("Room title", info.title);
+        if (t === null) return;
+        t = (t || "").trim();
+        if (!t) { toast("Title cannot be empty."); return; }
+        var s = connectSocket();
+        if (s) s.emit("room title", { room: myLiveRoomId || currentRoomId, title: t });
+      });
+      $("ritCopyId").addEventListener("click", function(){
+        var info = roomInfoData(); if (!info) return;
+        var id = info.idNum || info.host;
+        function done(){ toast("ID copied: " + id); }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(id).then(done, done);
+        else done();
+      });
+      $("ritLevelRow").addEventListener("click", function(){
+        var info = roomInfoData(); if (!info) return;
+        toast("Room level Lv." + info.level + " — " + info.host + "'s level.");
+      });
+      $("ritSettingsRow").addEventListener("click", function(){
+        if (!room || !room.isHost) { toast("Only the host can change room settings."); return; }
+        $("roomInfoTray").classList.remove("open");
+        renderThemeGrid(); $("themeTray").classList.add("open");
+      });
+      $("ritTagRow").addEventListener("click", function(){
+        if (!room || !room.isHost) { toast("Only the host can change the tag."); return; }
+        var info = roomInfoData(); if (!info) return;
+        var t = prompt("Room tag", info.tag || "");
+        if (t === null) return;
+        var s = connectSocket();
+        if (s) s.emit("room tag", { room: myLiveRoomId || currentRoomId, tag: (t || "").trim() });
+      });
+      $("ritAnnRow").addEventListener("click", function(){
+        if (!room || !room.isHost) { toast("Only the host can post an announcement."); return; }
+        var t = prompt("Announcement for everyone in the room", "");
+        if (t === null) return;
+        t = (t || "").trim();
+        if (!t) return;
+        var s = connectSocket();
+        if (s) s.emit("room announcement", { room: myLiveRoomId || currentRoomId, text: t });
+        toast("Announcement posted.");
+      });
+      $("ritBoostBtn").addEventListener("click", function(){
+        toast("Boost jald aayega — iske liye payment system chahiye.");
+      });
       $("viewerEyeBtn").addEventListener("click", openViewersTray); // v50: asli <button>, click par tray khule
       $("viewerEyeBtn").addEventListener("touchstart", function(e){ e.preventDefault(); openViewersTray(); }, {passive:false}); // v50: mobile touch par bhi tray khule
       $("viewersTrayX").addEventListener("click", function(){ $("viewersTray").classList.remove("open"); });
