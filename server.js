@@ -1137,7 +1137,14 @@ io.on("connection", (sock) => {
       emitChatToRoom(roomId, { room: roomId, name: "System", text: name + " sat on seat " + wantSeat });
       return;
     }
-    io.to(live.hostId).emit("guest request", { room: roomId, guestId: sock.id, name: name, seat: 0 }); // button se request — host approve kare
+    // v47: Join button (bina seat) — pehli khaali seat par khud-ba-khud beth jayein, host ki approve nahi
+    const firstFree = seatsNow.findIndex((x) => !x);
+    if (firstFree === -1) { sock.emit("guest request failed", { room: roomId, reason: "full" }); return; }
+    guestSeq[roomId] = (guestSeq[roomId] || 0) + 1;
+    seatsNow[firstFree] = { seat: firstFree + 1, guestId: sock.id, name: name, seq: guestSeq[roomId] };
+    io.to(sock.id).emit("guest approved", { room: roomId, seat: firstFree + 1, hostId: live.hostId });
+    broadcastSeats(roomId);
+    emitChatToRoom(roomId, { room: roomId, name: "System", text: name + " sat on seat " + (firstFree + 1) });
   });
 
   sock.on("guest approve", (data) => {
@@ -1202,39 +1209,6 @@ io.on("connection", (sock) => {
       }
     }
     sock.emit("viewer kicked", { room: roomId, target: target });
-  });
-
-  // v32: Host invite — viewer ko guest banne ki request bheje (seat ke saath)
-  sock.on("guest invite", (data) => {
-    if (!data || typeof data !== "object") return;
-    const to = typeof data.to === "string" ? data.to : "";
-    const seat = parseInt(data.seat, 10);
-    if (!joinedRoom || !isHostOf(sock.id, joinedRoom) || !to) return;
-    if (socketRoom[to] !== joinedRoom) return; // target room mein nahi
-    if (!seat || seat < 1 || seat > seatCount(joinedRoom)) return;
-    if (seatsFor(joinedRoom)[seat - 1]) return; // seat bhari hui
-    io.to(to).emit("guest invite", { from: liveRooms[joinedRoom].host, room: joinedRoom, seat: seat });
-  });
-  sock.on("guest invite accept", (data) => {
-    if (!data || typeof data !== "object") return;
-    const roomId = typeof data.room === "string" ? data.room : "";
-    const wantSeat = parseInt(data.seat, 10);
-    if (!roomId || socketRoom[sock.id] !== roomId || !liveRooms[roomId]) return;
-    const seats = seatsFor(roomId);
-    if (seats.some((x) => x && x.guestId === sock.id)) return;
-    const idx = (wantSeat >= 1 && wantSeat <= seats.length && !seats[wantSeat - 1]) ? wantSeat - 1 : seats.findIndex((x) => !x);
-    if (idx === -1) { sock.emit("guest request failed", { room: roomId, reason: "full" }); return; }
-    const name = cleanName((sock.data && sock.data.userName) || "") || "Guest";
-    guestSeq[roomId] = (guestSeq[roomId] || 0) + 1;
-    seats[idx] = { seat: idx + 1, guestId: sock.id, name: name, seq: guestSeq[roomId] };
-    io.to(sock.id).emit("guest approved", { room: roomId, seat: idx + 1, hostId: liveRooms[roomId].hostId });
-    broadcastSeats(roomId);
-  });
-  sock.on("guest invite decline", (data) => {
-    if (!data || typeof data !== "object") return;
-    const roomId = typeof data.room === "string" ? data.room : "";
-    if (!roomId || socketRoom[sock.id] !== roomId || !liveRooms[roomId]) return;
-    io.to(liveRooms[roomId].hostId).emit("guest invite declined", { room: roomId, name: (sock.data && sock.data.userName) || "Guest" });
   });
 
   // v32: Room admin — host kisi ko admin banaye / hataye

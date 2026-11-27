@@ -1157,23 +1157,6 @@
           </div>
         </div>
 
-        <!-- v32: Invite popup — host ne guest banne ki invite bheji -->
-        <div class="profile-pop" id="invitePop">
-          <div class="pp-card">
-            <div class="pp-name" id="inviteText"></div>
-            <div class="pp-tag">Tap Accept to join as a guest</div>
-            <button class="pp-btn gold" id="inviteAccept" type="button">Accept</button>
-            <button class="pp-btn" id="inviteDecline" type="button">Decline</button>
-          </div>
-        </div>
-
-        <!-- v32: Invite picker — host khaali seat par tap kare to viewer chune -->
-        <div class="gift-tray" id="inviteTray">
-          <button class="tray-x" id="inviteTrayX" type="button" aria-label="Close">✕</button>
-          <h3>Invite a viewer</h3>
-          <p class="bal-line">Pick who sits on this seat.</p>
-          <div id="inviteList"></div>
-        </div>
         <input type="file" id="galleryCoverFile" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" />
 
         <!-- v13: followers / following list -->
@@ -2017,7 +2000,7 @@
           var seat = ordered[i] || null;
           var vid = tile.querySelector("video");
           var nm = tile.querySelector(".gname");
-          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; detachEqTile(tile); /* v38: khaali seat — bars band */ var _m = tile.querySelector(".gmute"); if (_m) { _m.classList.remove("show"); _m.onclick = null; } tile.onclick = null; var guestsOn = room && room.data && room.data.multiGuest !== false && room.data.mode !== 'video'; if (isAudio) { tile.classList.add("empty"); nm.textContent = ""; if (!room.isHost) { tile.onclick = (function(sn){ return function(){ requestGuest(sn); }; })(i + 1); } else { tile.onclick = (function(sn){ return function(){ openInvitePicker(sn); }; })(i + 1); } } else if (guestsOn) { tile.classList.add("empty"); nm.textContent = room.isHost ? "Empty seat" : "+ Join"; if (!room.isHost) { tile.onclick = (function(sn){ return function(){ requestGuest(sn); }; })(i + 1); } else { tile.onclick = (function(sn){ return function(){ openInvitePicker(sn); }; })(i + 1); } } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
+          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; detachEqTile(tile); /* v38: khaali seat — bars band */ var _m = tile.querySelector(".gmute"); if (_m) { _m.classList.remove("show"); _m.onclick = null; } tile.onclick = null; var guestsOn = room && room.data && room.data.multiGuest !== false && room.data.mode !== 'video'; if (isAudio) { tile.classList.add("empty"); nm.textContent = ""; if (!room.isHost) { tile.onclick = (function(sn){ return function(){ requestGuest(sn); }; })(i + 1); } else { tile.onclick = null; /* v46: host ke liye invite wala tareeqa khatam — khaali seat dabane se kuch nahi hota, sirf guest request se seat milti hai */ } } else if (guestsOn) { tile.classList.add("empty"); nm.textContent = room.isHost ? "Empty seat" : "+ Join"; if (!room.isHost) { tile.onclick = (function(sn){ return function(){ requestGuest(sn); }; })(i + 1); } else { tile.onclick = null; /* v46: host ke liye invite wala tareeqa khatam — khaali seat dabane se kuch nahi hota, sirf guest request se seat milti hai */ } } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
           tile.classList.add("on"); tile.classList.remove("empty"); tile.onclick = null;
           var mute = tile.querySelector(".gmute"); // v31: mute button / indicator
           if (mute) {
@@ -2064,14 +2047,14 @@
       }
       function requestGuest(seat){ // v35: seat par tap — wahi seat maangein
         if (!room || room.isHost || myGuestSeat) return;
-        if (guestRequested) { toast("Request already sent — waiting for host."); return; } // v37: khamoshi nahi — guest ko pata chale
+        if (guestRequested) { toast("Joining — please wait a moment."); return; } // v47: host ki approve nahi hoti, guest khud-ba-khud bethta hai // v37: khamoshi nahi — guest ko pata chale
         if (!currentUser) { toast("Log in first to join as guest."); return; }
         var s = connectSocket();
         if (!s || !currentRoomId) return;
         guestRequested = true;
         renderGuestBtn();
         s.emit("guest request", { room: currentRoomId, name: myName(), seat: seat || 0 });
-        toast(seat ? ("Joining seat " + seat + "...") : "Guest request sent to host."); // v36: seat par tap — seedha seat, host ki approve nahi
+        toast(seat ? ("Joining seat " + seat + "...") : "Joining the live..."); // v47: Join button bhi seedha seat par bithata hai, host ki approve nahi // v36: seat par tap — seedha seat, host ki approve nahi
       }
       function leaveGuest(){
         var s = connectSocket();
@@ -2491,16 +2474,6 @@
           applyMyMic();
           toast(d.muted ? "The host muted you." : "The host unmuted you.");
           renderGuestTiles();
-        });
-        s.on("guest invite", function(d){ // v32: host ne invite bheji
-          if (!d || !room || room.isHost) return;
-          inviteSeat = d.seat || 0;
-          $("inviteText").textContent = (d.from || "The host") + " invited you to join as a guest" + (d.seat ? " (Seat " + d.seat + ")" : "");
-          $("invitePop").classList.add("open");
-        });
-        s.on("guest invite declined", function(d){
-          if (!d) return;
-          toast((d.name || "Guest") + " declined the invite.");
         });
         s.on("room admins", function(d){ // v32
           if (!d) return;
@@ -3015,16 +2988,6 @@
       $("pkResultCloseBtn").addEventListener("click", function(){ $("pkResult").classList.remove("show"); }); // v28
       $("ppClose").addEventListener("click", function(){ closeUserProfile(); }); // v32
       $("profilePop").addEventListener("click", function(ev){ if (ev.target === this) closeUserProfile(); });
-      $("invitePop").addEventListener("click", function(ev){ if (ev.target === this) $("invitePop").classList.remove("open"); });
-      $("inviteTrayX").addEventListener("click", function(){ $("inviteTray").classList.remove("open"); });
-      $("inviteAccept").addEventListener("click", function(){ // v32: invite accept — seat par beth jayein
-        $("invitePop").classList.remove("open");
-        if (socket && currentRoomId) socket.emit("guest invite accept", { room: currentRoomId, seat: inviteSeat });
-      });
-      $("inviteDecline").addEventListener("click", function(){
-        $("invitePop").classList.remove("open");
-        if (socket && currentRoomId) socket.emit("guest invite decline", { room: currentRoomId });
-      });
       $("galleryCoverFile").addEventListener("change", function(){ // v32: gallery se room DP
         var f = this.files && this.files[0]; if (!f) return;
         downscaleImageFile(f, 720, 0.75, function(url){
@@ -3507,27 +3470,6 @@
         $("profilePop").classList.add("open");
       }
       function closeUserProfile(){ $("profilePop").classList.remove("open"); ppTarget = null; }
-      // v32: Invite picker — host khaali seat par tap kare to viewer chune
-      var inviteSeat = 0;
-      function openInvitePicker(seat){
-        inviteSeat = seat;
-        var list = $("inviteList"); list.innerHTML = "";
-        var ids = Object.keys(watchers).filter(function(id){ return !roomSeats.some(function(x){ return x && x.guestId === id; }); });
-        if (!ids.length) { list.innerHTML = '<div style="font-size:.85rem;opacity:.8">No viewers to invite yet.</div>'; }
-        ids.forEach(function(id){
-          var row = document.createElement("div"); row.className = "watcher-row";
-          var nm = document.createElement("span"); nm.className = "wname"; nm.textContent = watchers[id];
-          var b = document.createElement("button"); b.type = "button"; b.className = "watcher-block"; b.textContent = "Invite";
-          b.addEventListener("click", function(){
-            if (socket && myLiveRoomId) socket.emit("guest invite", { room: myLiveRoomId, to: id, seat: inviteSeat });
-            $("inviteTray").classList.remove("open");
-            toast("Invite sent to " + watchers[id]);
-          });
-          row.appendChild(nm); row.appendChild(b); list.appendChild(row);
-        });
-        $("inviteTray").classList.add("open");
-      }
-
       // Blocked users screen
       function openBlocked(){
         var list = $("blockedList");
