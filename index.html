@@ -669,6 +669,7 @@
       /* v49: Bigo-style viewers tray — safed panel, photo + naam + level + XP bar */
       #viewersTray { background: #fff; color: #1a1a1a; min-height: 62dvh; max-height: 72dvh; display: flex; flex-direction: column; } /* v52: bara panel - Bigo jaisa, chahe 1 viewer ho to bhi upar tak */
       /* v53: Bigo jaisa room header (upar) + room info sheet (neeche se khule) */
+      .host-pill { display: none !important; } /* v55: host pill (Younus + followers) PERMANENT — sirf ooper wala room header dikhe, ye duplicate na dikhe; eye + X + Follow button rehte hain */
       .room-info-head { order: 0; align-self: flex-start; position: relative; z-index: 3; display: flex; align-items: center; gap: .55rem; max-width: 82%; background: rgba(10,10,16,.78); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: .3rem .7rem .3rem .32rem; color: #fff; cursor: pointer; text-align: left; margin-bottom: .35rem; box-sizing: border-box; } /* v54: div (button nahi) + gehra background + z-index — phone par header saaf dikhe */
       .rih-dp { width: 2.1rem; height: 2.1rem; border-radius: .5rem; overflow: hidden; flex-shrink: 0; background: #7a4fd0; }
       .rih-dp img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -2201,7 +2202,7 @@
               cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
               color: "#7a4fd0", img: info.cover || "singer", hostAvatar: info.hostAvatar || "",
               multiGuest: info.multiGuest !== false, mode: info.mode || 'video',
-              theme: info.theme || "", cover: info.cover || "singer", hostIdNum: info.hostIdNum || "", hostLevel: info.hostLevel || 1, tag: info.tag || "" // v53: room header + info sheet
+              theme: info.theme || "", cover: info.cover || "singer", hostIdNum: info.hostIdNum || "", hostLevel: info.hostLevel || 1, tag: info.tag || "", roomLevel: info.roomLevel || 1, roomExp: info.roomExp || 0 // v55: Room Level + EXP // v53: room header + info sheet
             };
           });
           Object.keys(liveFeed).forEach(function(k){ if (!keep[k]) delete liveFeed[k]; });
@@ -2215,7 +2216,7 @@
             cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
             color: "#7a4fd0", img: info.cover || "singer", hostAvatar: info.hostAvatar || "",
             multiGuest: info.multiGuest !== false, mode: info.mode || 'video',
-            theme: info.theme || "", cover: info.cover || "singer" // v37: host ka background guest ko bhi dikhe
+            theme: info.theme || "", cover: info.cover || "singer", roomLevel: info.roomLevel || 1, roomExp: info.roomExp || 0 // v37: host ka background guest ko bhi dikhe; v55: Room Level + EXP
           };
           renderHome();
           if (room && room.isHost && info.room === myLiveRoomId && !liveConfirmed) { liveConfirmed = true; if (liveConfirmTimer) { clearTimeout(liveConfirmTimer); liveConfirmTimer = null; } toast("Congrats! You're live"); }
@@ -2568,6 +2569,11 @@
           if (room.data) room.data.tag = d.tag;
           $("ritTagVal").textContent = d.tag || "No tag";
         });
+        s.on("room level", function(d){ // v55: Room level up hua — sheet mein level update karein
+          if (!d || !room || d.roomLevel === undefined) return;
+          if (room.data) { room.data.roomLevel = d.roomLevel; room.data.roomExp = d.roomExp || 0; }
+          var _rl = $("ritLevel"); if (_rl) _rl.textContent = "Lv." + d.roomLevel;
+        });
         s.on("you were kicked", function(d){
           toast(d && d.message ? d.message : "The host removed you from this live.");
           if (room && d && d.room === currentRoomId) closeRoom();
@@ -2773,6 +2779,7 @@
         room.likes++;
         $("likeCount").textContent = fmt(room.likes);
         flyHeart(); flyHeart();
+        var _ls = connectSocket(); if (_ls) _ls.emit("like", { room: myLiveRoomId || currentRoomId }); // v55: like par Room EXP +1
       });
       $("chatForm").addEventListener("submit", function(e){
         e.preventDefault();
@@ -2943,7 +2950,7 @@
           var liveRoomId = "live-" + myName().toLowerCase().replace(/[^a-z0-9]/g, "");
           myLiveRoomId = liveRoomId;
           room = {
-            data: { title: title, host: myName(), cat: cat, mode: liveMode, multiGuest: liveMode !== 'video', hostAvatar: lastProfile ? lastProfile.avatar : "", theme: chosenTheme }, // v26
+            data: { title: title, host: myName(), cat: cat, mode: liveMode, multiGuest: liveMode !== 'video', hostAvatar: lastProfile ? lastProfile.avatar : "", theme: chosenTheme, roomLevel: 1, roomExp: 0 }, // v26; v55: Room Level Lv.1 se shuru
             isHost: true, viewers: 0, likes: 0, following: true,
             gifts: 0, giftValue: 0, elapsed: 0
           };
@@ -3108,10 +3115,10 @@
         var hostIdNum = "";
         if (room.isHost && lastProfile && lastProfile.id) hostIdNum = String(lastProfile.id);
         else if (d.hostIdNum) hostIdNum = String(d.hostIdNum);
-        var hostLevel = 1;
-        if (room.isHost && lastProfile && lastProfile.level) hostLevel = lastProfile.level;
-        else if (d.hostLevel) hostLevel = d.hostLevel;
-        return { title: d.title || "Live", host: d.host || "Host", cover: d.cover || d.theme || "singer", tag: d.tag || "", idNum: hostIdNum, level: hostLevel };
+        // v55: Room level — host ka personal level nahi, room ka apna level (har live Lv.1 se shuru)
+        var roomLevel = (d.roomLevel) || 1;
+        var roomExp = (d.roomExp) || 0;
+        return { title: d.title || "Live", host: d.host || "Host", cover: d.cover || d.theme || "singer", tag: d.tag || "", idNum: hostIdNum, level: roomLevel, roomExp: roomExp };
       }
       function setRoomInfoDp(){
         var info = roomInfoData(); if (!info) return;
@@ -3163,9 +3170,12 @@
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(id).then(done, done);
         else done();
       });
-      $("ritLevelRow").addEventListener("click", function(){
+      $("ritLevelRow").addEventListener("click", function(){ // v55: Room level par click — EXP progress dikhayein
         var info = roomInfoData(); if (!info) return;
-        toast("Room level Lv." + info.level + " — " + info.host + "'s level.");
+        var exp = info.roomExp || 0;
+        var nextAt = info.level * 100; // agle level ke liye kitna EXP chahiye
+        var need = nextAt - exp; if (need < 0) need = 0;
+        toast("Room Lv." + info.level + " — " + exp + " EXP · Lv." + (info.level + 1) + " ke liye " + need + " EXP aur");
       });
       $("ritSettingsRow").addEventListener("click", function(){
         if (!room || !room.isHost) { toast("Only the host can change room settings."); return; }

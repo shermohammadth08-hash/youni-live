@@ -899,6 +899,25 @@ function emitChatToRoom(roomId, msg){
   }
 }
 
+// v55: Room Level + Room EXP — har live Lv.1 (0 EXP) se shuru; activity se EXP bharta hai;
+// har 100 EXP par 1 level up. Level up par room mein sab ko bataya jata hai.
+function roomLevelFor(exp){ return Math.floor((exp || 0) / 100) + 1; }
+function addRoomExp(roomId, amount){
+  const live = liveRooms[roomId];
+  if (!live || !amount) return;
+  const oldLevel = live.roomLevel || 1;
+  live.roomExp = (live.roomExp || 0) + amount;
+  const newLevel = roomLevelFor(live.roomExp);
+  live.roomLevel = newLevel;
+  if (newLevel > oldLevel) {
+    io.to(roomId).emit("room level", { room: roomId, roomLevel: newLevel, roomExp: live.roomExp });
+    emitChatToRoom(roomId, { name: "System", text: "🎉 Room level up! Lv." + newLevel });
+    broadcastLiveList();
+  }
+}
+// v55: har 1 minute live rehne par +2 Room EXP (har live room ko)
+setInterval(() => { for (const rid of Object.keys(liveRooms)) addRoomExp(rid, 2); }, 60000);
+
 // v12: Gift room ke sab viewers ko — jis ne sender ko block kiya hai use nahi.
 function emitGiftToRoom(roomId, gift){
   for (const [, s] of io.sockets.sockets) {
@@ -956,6 +975,11 @@ io.on("connection", (sock) => {
     sock.emit("chat history", (roomHistory[roomId] || []).slice(-MAX_HISTORY));
     if (liveRooms[roomId]) {
       broadcastViewers(roomId); // v29: naya viewer aaya — count update
+      // v55: naya viewer aaya — Room EXP +10 (host ko nahi; ek socket ek room mein ek dafa)
+      if (liveRooms[roomId] && sock.id !== liveRooms[roomId].hostId) {
+        if (!sock.data.expRooms) sock.data.expRooms = new Set();
+        if (!sock.data.expRooms.has(roomId)) { sock.data.expRooms.add(roomId); addRoomExp(roomId, 10); }
+      }
       sock.emit("live started", Object.assign({ room: roomId, hostAvatar: avatarFor(liveRooms[roomId].host) }, liveRooms[roomId])); // v34
       sock.emit("guest seats", { room: roomId, seats: seatsPayload(roomId) }); // v20
       sock.emit("room admins", { room: roomId, admins: liveRooms[roomId].admins || [] }); // v32
@@ -986,6 +1010,7 @@ io.on("connection", (sock) => {
     if (!sock.rooms.has(roomId)) return; // v8: room se nikaale gaye (block) to message nahi
     if (!name || !text || text.length > 200) return;
     const msg = { room: roomId, name: name, text: text, time: Date.now() };
+    addRoomExp(roomId, 5); // v55: chat message — Room EXP +5
     if (!roomHistory[roomId]) roomHistory[roomId] = [];
     roomHistory[roomId].push(msg);
     if (roomHistory[roomId].length > MAX_HISTORY) roomHistory[roomId] = roomHistory[roomId].slice(-MAX_HISTORY);
@@ -1012,6 +1037,7 @@ io.on("connection", (sock) => {
     if (ti === -1) return;
     const tok = giftTokens.splice(ti, 1)[0];
     emitGiftToRoom(roomId, { room: roomId, from: from, to: to, gift: gift, cost: tok.cost, time: now });
+    addRoomExp(roomId, tok.cost); // v55: gift — Room EXP +gift price
     const pk = pkForRoom(roomId); // v28: PK mein gift = score
     if (pk) {
       if (roomId === pk.roomA) pk.scoreA += tok.cost; else pk.scoreB += tok.cost;
@@ -1021,7 +1047,17 @@ io.on("connection", (sock) => {
     }
   });
 
-  // ---- WebRTC signalling: sirf usi room ke andar, host <-> watcher ----
+    sock.on("like", (data) => { // v55: like dabane par Room EXP +1 (500ms rate limit — spam rokne ke liye)
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    if (!roomId || roomId !== joinedRoom || !liveRooms[roomId]) return;
+    const now = Date.now();
+    if (sock.data.lastLikeAt && now - sock.data.lastLikeAt < 500) return;
+    sock.data.lastLikeAt = now;
+    addRoomExp(roomId, 1);
+  });
+
+// ---- WebRTC signalling: sirf usi room ke andar, host <-> watcher ----
   sock.on("go live", (data) => {
     if (!data || typeof data !== "object") return;
     const roomId = typeof data.room === "string" ? data.room : "";
@@ -1031,7 +1067,7 @@ io.on("connection", (sock) => {
     const cat = typeof data.cat === "string" ? data.cat.slice(0, 20) : "Chat";
     const rawCover = typeof data.cover === "string" ? data.cover : "singer"; // v32: gallery DP (data URL) ya built-in cover
     const cover = (rawCover.startsWith("data:image/") && rawCover.length <= 200000) ? rawCover : (rawCover.length <= 30 ? rawCover : "singer");
-    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, theme: (typeof data.theme === "string" && data.theme.length <= 20) ? data.theme.slice(0, 20) : cover, multiGuest: data.multiGuest !== false, mode: typeof data.mode === "string" ? data.mode.slice(0, 10) : "video", tag: "", cameraOn: true }; // v23, v26 theme
+    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, theme: (typeof data.theme === "string" && data.theme.length <= 20) ? data.theme.slice(0, 20) : cover, multiGuest: data.multiGuest !== false, mode: typeof data.mode === "string" ? data.mode.slice(0, 10) : "video", tag: "", cameraOn: true, roomExp: 0, roomLevel: 1 }; // v23, v26 theme; v55: Room Level Lv.1 se shuru
     if (!sock.data.userName) sock.data.userName = host;
     emitLiveStarted(Object.assign({ room: roomId, hostAvatar: avatarFor(host) }, liveRooms[roomId])); // v34: guest ko host ki photo dikhe
   });
