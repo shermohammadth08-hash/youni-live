@@ -400,7 +400,9 @@
       /* v38: audio room ka sahi layout — beech wala hissa (seats) apni jagah scroll ho, neeche wala hissa (panel + chat + buttons) us ke neeche fixed rahe, kuch bhi kisi ke upar na aaye */
       #roomScroll { display: contents; } /* v38: baaki modes mein wrapper ghayab — pehle jaisa hi layout */
       #roomView.audio-mode #roomScroll { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
-      #roomView.audio-mode .room-bottom { position: relative; flex-shrink: 0; }
+      #roomView.audio-mode .room-bottom { position: relative; flex-shrink: 0; display: flex; flex-direction: column; max-height: 46dvh; } /* v44: neeche wala hissa bandha hua — seats kabhi nahi chhupengi, chat andar scroll hogi */
+      #roomView.audio-mode .chat { flex: 0 1 auto; min-height: 0; } /* v44: chat dabao — jagah kam ho to chat chhoti hogi, seats ko jagah milegi */
+      #roomView.audio-mode .watcher-panel, #roomView.audio-mode #hostChatRow, #roomView.audio-mode #hostActions, #roomView.audio-mode #viewerActions { flex-shrink: 0; }
       #roomView.audio-mode .chat { max-height: 26dvh; mask-image: none; -webkit-mask-image: none; } /* v41: chat thodi unchi + upar wala fade hata diya — line aadhi/kati hui na dikhe */
       #roomView.audio-mode .watcher-panel { max-height: 10dvh; overflow-y: auto; } /* v42: viewers panel chhota — chat bharne par seats kabhi chhupen gi nahi */
       #pkVideo { display: none; position: absolute; top: 170px; right: 10px; width: calc(50% - 14px); height: 38%; border-radius: 16px; object-fit: cover; background: #000; z-index: 4; }
@@ -546,8 +548,8 @@
 
       .room-actions { display: flex; align-items: center; gap: .5rem; }
       .chat-input {
-        flex: 1; display: flex; background: rgba(10,10,16,.55); border-radius: 999px; overflow: hidden;
-      }
+        flex: 1; display: flex; align-items: center; background: rgba(10,10,16,.55); border-radius: 999px; overflow: hidden;
+      } /* v44: Send button bilkul beech mein — upar nahi jayega */
       .chat-input input {
         flex: 1; border: none; background: none; color: #fff; padding: .55rem .8rem;
         font-size: .88rem; min-height: 2.6rem; outline: none; min-width: 0;
@@ -555,7 +557,7 @@
       .chat-input input::placeholder { color: rgba(255,255,255,.65); }
       .chat-input button {
         border: none; background: none; color: #fff; font-weight: 800; cursor: pointer;
-        padding: 0 .9rem; font-size: .85rem;
+        padding: 0 .9rem; font-size: .85rem; align-self: center;
       }
       .round-btn {
         width: 2.75rem; height: 2.75rem; border-radius: 50%; border: none; cursor: pointer;
@@ -2289,6 +2291,11 @@
           if (d.room !== myRoom) return;
           room.viewers = d.count;
           $("roomViewerCount").textContent = fmt(d.count);
+          if (room.isHost && d.viewers) { // v44: host ki viewers list khud theek ho jaye — server jo naam bhejta hai woh list mein daal dein
+            var _chg = false;
+            d.viewers.forEach(function(v){ if (v && v.id && v.name && !watchers[v.id]) { watchers[v.id] = v.name; _chg = true; } });
+            if (_chg) renderWatcherList();
+          }
         });
         s.on("watcher", function(d){
           if (!myLiveRoomId || !d || d.room !== myLiveRoomId) return;
