@@ -397,6 +397,11 @@
       #roomView.audio-mode #audioHostCircle { position: static; transform: none; order: 5; margin: .4rem auto 0; }
       #roomView.audio-mode #guestTiles { position: static; order: 6; margin: .7rem 10px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
       #roomView.audio-mode .room-bottom { order: 7; }
+      /* v37: neeche wale buttons kabhi ghayab na hon — screen scroll ho, bottom chipka rahe */
+      #roomView.audio-mode { overflow-y: auto; }
+      #roomView.audio-mode .room-bottom { position: sticky; bottom: 0; flex-shrink: 0; background: linear-gradient(to top, rgba(0,0,0,.72), rgba(0,0,0,0)); }
+      #roomView.audio-mode .chat { max-height: 22dvh; }
+      #roomView.audio-mode .watcher-panel { max-height: 18dvh; overflow-y: auto; }
       #pkVideo { display: none; position: absolute; top: 170px; right: 10px; width: calc(50% - 14px); height: 38%; border-radius: 16px; object-fit: cover; background: #000; z-index: 4; }
       #pkVideo.show { display: block; }
       #roomView.pk-mode .room-video.show { top: 170px; left: 10px; right: auto; bottom: auto; width: calc(50% - 14px); height: 38%; border-radius: 16px; }
@@ -1966,7 +1971,8 @@
         else { b.classList.remove("guest-on"); b.setAttribute("aria-label", guestRequested ? "Guest request sent" : "Join as guest"); }
       }
       function requestGuest(seat){ // v35: seat par tap — wahi seat maangein
-        if (!room || room.isHost || myGuestSeat || guestRequested) return;
+        if (!room || room.isHost || myGuestSeat) return;
+        if (guestRequested) { toast("Request already sent — waiting for host."); return; } // v37: khamoshi nahi — guest ko pata chale
         if (!currentUser) { toast("Log in first to join as guest."); return; }
         var s = connectSocket();
         if (!s || !currentRoomId) return;
@@ -2056,7 +2062,8 @@
               id: info.room, title: info.title || "Live", host: info.host || "Host",
               cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
               color: "#7a4fd0", img: info.cover || "singer", hostAvatar: info.hostAvatar || "",
-              multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
+              multiGuest: info.multiGuest !== false, mode: info.mode || 'video',
+              theme: info.theme || "", cover: info.cover || "singer" // v37: host ka background guest ko bhi dikhe
             };
           });
           Object.keys(liveFeed).forEach(function(k){ if (!keep[k]) delete liveFeed[k]; });
@@ -2068,7 +2075,8 @@
             id: info.room, title: info.title || "Live", host: info.host || "Host",
             cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
             color: "#7a4fd0", img: info.cover || "singer", hostAvatar: info.hostAvatar || "",
-            multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
+            multiGuest: info.multiGuest !== false, mode: info.mode || 'video',
+            theme: info.theme || "", cover: info.cover || "singer" // v37: host ka background guest ko bhi dikhe
           };
           renderHome();
           if (room && room.isHost && info.room === myLiveRoomId && !liveConfirmed) { liveConfirmed = true; if (liveConfirmTimer) { clearTimeout(liveConfirmTimer); liveConfirmTimer = null; } toast("Congrats! You're live"); }
@@ -2512,6 +2520,8 @@
       }
       function setupRoomUI(title, host, color, followers, img, alt){
         hideRoomVideo();
+        var _cb2 = $("chatBox"); if (_cb2) _cb2.innerHTML = ""; // v37: room khulte hi chat fresh — purani live ki linein nahi
+        var _rvc = $("roomViewerCount"); if (_rvc) _rvc.textContent = fmt(room && room.viewers ? room.viewers : 0); // v37: viewers count bhi fresh
         currentTheme = (room.data && room.data.theme) || (room.data && room.data.cover) || "singer"; // v26
         applyRoomTheme(currentTheme);
         $("roomView").classList.toggle("room-multi", !!(room.data && room.data.mode === 'multi')); // v26
@@ -2579,6 +2589,7 @@
         viewerStreams = []; // v20
         roomSeats = []; // v20
         var _gaw = $("guestAudioWrap"); if (_gaw) _gaw.innerHTML = ""; // v35: guest audio saaf karein
+        var _cb = $("chatBox"); if (_cb) _cb.innerHTML = ""; // v37: purani live ki chat saaf — nayi live bilkul fresh
         guestRequests = []; // v20
         renderGuestTiles(); // v20
         renderGuestRequests(); // v20

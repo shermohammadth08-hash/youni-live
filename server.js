@@ -806,6 +806,8 @@ function endLiveRoom(roomId){
   if (pk) endPk(pk.id, 'live-ended', roomId); // live khatam — doosra host jeetta hai
   delete liveRooms[roomId];
   clearGuestSeats(roomId);
+  delete roomHistory[roomId]; // v37: purani live ki chat history mita dein — nayi live mein purani lines na aayein
+  for (const [, s] of io.sockets.sockets) { if (s.rooms.has(roomId)) s.leave(roomId); } // v37: purane viewers room se niklein — nayi live mein count 0 se shuru, naam bhi dobara register hon
   io.emit("live ended", { room: roomId });
 }
 
