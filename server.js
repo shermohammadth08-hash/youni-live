@@ -820,11 +820,23 @@ function roomHiddenFor(viewerName, hostName){
   return hasBlocked(viewerName, hostName) || hasBlocked(hostName, viewerName);
 }
 
+function roomViewerCount(roomId){ // v29: asli viewers — host ko ginay baghair
+  const live = liveRooms[roomId]; if (!live) return 0;
+  let n = 0;
+  for (const [, s] of io.sockets.sockets) {
+    if (s.rooms.has(roomId) && s.id !== live.hostId) n++;
+  }
+  return n;
+}
+function broadcastViewers(roomId){ // v29
+  if (!liveRooms[roomId]) return;
+  io.to(roomId).emit("viewers", { room: roomId, count: roomViewerCount(roomId) });
+}
 function liveListFor(viewerName){
   return Object.keys(liveRooms)
     .filter((rid) => !roomHiddenFor(viewerName, liveRooms[rid].host))
     .map((rid) => {
-      const base = Object.assign({ room: rid, hostAvatar: avatarFor(liveRooms[rid].host) }, liveRooms[rid]);
+      const base = Object.assign({ room: rid, hostAvatar: avatarFor(liveRooms[rid].host), viewers: roomViewerCount(rid) }, liveRooms[rid]); // v29: asli viewer count
       const pk = pkForRoom(rid); // v28: PK chal rahi ho to late joiner ko bhi pata chale
       if (pk) {
         const isA = pk.roomA === rid;
@@ -895,6 +907,7 @@ io.on("connection", (sock) => {
     socketRoom[sock.id] = roomId;
     sock.emit("chat history", (roomHistory[roomId] || []).slice(-MAX_HISTORY));
     if (liveRooms[roomId]) {
+      broadcastViewers(roomId); // v29: naya viewer aaya — count update
       sock.emit("live started", Object.assign({ room: roomId }, liveRooms[roomId]));
       sock.emit("guest seats", { room: roomId, seats: seatsPayload(roomId) }); // v20
     }
@@ -910,6 +923,7 @@ io.on("connection", (sock) => {
         endLiveRoom(roomId);
       } else if (liveRooms[roomId]) {
         io.to(liveRooms[roomId].hostId).emit("watcher left", { watcherId: sock.id, room: roomId });
+        broadcastViewers(roomId); // v29: viewer gaya — count update
       }
     }
   });
@@ -1217,6 +1231,7 @@ io.on("connection", (sock) => {
         endLiveRoom(roomId);
       } else if (joinedRoom === roomId) {
         io.to(liveRooms[roomId].hostId).emit("watcher left", { watcherId: sock.id, room: roomId });
+        broadcastViewers(roomId); // v29: viewer disconnect — count update
       }
     });
     joinedRoom = null;

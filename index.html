@@ -389,6 +389,14 @@
       .theme-pick { border: 3px solid transparent; border-radius: 12px; overflow: hidden; padding: 0; cursor: pointer; height: 74px; }
       .theme-pick.on { border-color: var(--brand); }
       /* v28: PK Battle — split screen, score bar */
+      /* v29: audio room — host circle + seats flow mein, chat un ke neeche (overlap khatam) */
+      #roomView.audio-mode .room-top { order: 1; }
+      #roomView.audio-mode .room-title-bar { order: 2; }
+      #roomView.audio-mode .viewer-live-badge { order: 3; }
+      #roomView.audio-mode .live-timer { order: 4; }
+      #roomView.audio-mode #audioHostCircle { position: static; transform: none; order: 5; margin: .4rem auto 0; }
+      #roomView.audio-mode #guestTiles { position: static; order: 6; margin: .7rem 10px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      #roomView.audio-mode .room-bottom { order: 7; }
       #pkVideo { display: none; position: absolute; top: 170px; right: 10px; width: calc(50% - 14px); height: 38%; border-radius: 16px; object-fit: cover; background: #000; z-index: 4; }
       #pkVideo.show { display: block; }
       #roomView.pk-mode .room-video.show { top: 170px; left: 10px; right: auto; bottom: auto; width: calc(50% - 14px); height: 38%; border-radius: 16px; }
@@ -731,7 +739,7 @@
                 <option value="Cooking">Cooking</option>
               </select>
             </div>
-            <div class="field">
+            <div class="field" id="goLiveBgField">
               <label>Background</label>
               <div class="covers" id="themePick"></div>
               <div class="covers" id="coverPick" style="margin-top:.55rem"></div>
@@ -1090,6 +1098,9 @@
         <div class="gift-tray" id="musicTray">
           <h3>Play Music</h3>
           <p class="bal-line">Songs play in your live — everyone hears them with your voice.</p>
+          <button class="btn-cam" id="galleryMusicBtn" type="button" style="margin-bottom:.6rem">Pick from Gallery</button>
+          <input type="file" id="galleryMusicFile" accept="audio/*" style="display:none" />
+          <p class="bal-line" id="musicNow" style="display:none"></p>
           <div class="gift-grid" id="musicGrid"></div>
           <div style="display:flex;align-items:center;gap:.6rem;margin-top:.6rem"><span style="font-size:.82rem;opacity:.85">Music volume</span><input type="range" id="musicVol" min="0" max="100" value="80" style="flex:1" /></div>
           <button class="btn-cam" id="stopMusicBtn" type="button" style="margin-top:.6rem;display:none">Stop music</button>
@@ -1376,21 +1387,7 @@
         var h = 0; for (var i=0;i<name.length;i++) h = (h*31 + name.charCodeAt(i)) % 360;
         return "hsl(" + h + " 85% 72%)";
       }
-      function simMessage(pool){
-        var n = pick(NAMES);
-        addChat('<span class="who" style="color:' + nameColor(n) + '">' + n + '</span>' + pick(pool));
-      }
-      function simJoin(){
-        var n = pick(NAMES);
-        addChat(n + " joined the room", "join-msg");
-      }
-      function simGift(hostMode){
-        if (currentRoomId && currentRoomId.indexOf("live-") === 0) return; // v12: asli live mein nakli gift nahi
-        var g = pick(GIFT_DEFS.slice(0, 5));
-        var n = pick(NAMES);
-        addChat('<span class="who" style="color:' + nameColor(n) + '">' + n + '</span> sent ' + g.name, "gift-msg");
-        if (hostMode && room) { room.gifts++; room.giftValue += g.cost; }
-      }
+      // v29: simMessage/simJoin/simGift HATA DIYE — naqli chat/joins/gifts khatam, sirf asli log
 
       /* ================= Real-time chat (socket.io) ================= */
       /* Asli live chat: aap ka message server se usi room ke sab logon ko milta hai.
@@ -1637,11 +1634,13 @@
       function themeIsGradient(theme){ return THEMES.some(function(t){ return t.id === theme; }); }
       function applyRoomTheme(theme){
         var bg = $("roomBg"), th = $("roomBgTheme");
+        var mode = room && room.data ? room.data.mode : "";
+        if (mode === 'video') { bg.style.display = "none"; th.style.display = "none"; return; } // v29: plain LIVE mein background nahi
         var g = THEMES.find(function(t){ return t.id === theme; });
         if (g) { bg.style.display = "none"; th.style.background = g.css; th.style.display = ""; }
         else { th.style.display = "none"; bg.src = IMG[theme] || IMG["singer"]; bg.style.display = ""; }
       }
-      function roomBgShow(){ if (themeIsGradient(currentTheme)) { $("roomBg").style.display = "none"; $("roomBgTheme").style.display = ""; } else { $("roomBgTheme").style.display = "none"; $("roomBg").style.display = ""; } }
+      function roomBgShow(){ var mode = room && room.data ? room.data.mode : ""; if (mode === 'video') { roomBgHide(); return; } if (themeIsGradient(currentTheme)) { $("roomBg").style.display = "none"; $("roomBgTheme").style.display = ""; } else { $("roomBgTheme").style.display = "none"; $("roomBg").style.display = ""; } }
       function roomBgHide(){ $("roomBg").style.display = "none"; $("roomBgTheme").style.display = "none"; }
       function showRoomVideo(stream, muted){
         var v = $("roomVideo");
@@ -1747,6 +1746,8 @@
           g.appendChild(b);
         });
         $("stopMusicBtn").style.display = musicOn ? "" : "none";
+        var mn = $("musicNow"); // v29: gallery gaane ka naam
+        if (mn) { mn.style.display = musicOn ? "" : "none"; if (musicOn) mn.textContent = "Now playing: " + musicName; }
       }
       function hideRoomVideo(){
         var v = $("roomVideo");
@@ -1896,7 +1897,7 @@
             keep[info.room] = true;
             liveFeed[info.room] = {
               id: info.room, title: info.title || "Live", host: info.host || "Host",
-              cat: info.cat || "Chat", viewers: 2, likes: 0, followers: 0,
+              cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
               color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer",
               multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
             };
@@ -1908,7 +1909,7 @@
           if (!info || !info.room) return;
           liveFeed[info.room] = {
             id: info.room, title: info.title || "Live", host: info.host || "Host",
-            cat: info.cat || "Chat", viewers: 2, likes: 0, followers: 0,
+            cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
             color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer",
             multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
           };
@@ -2023,9 +2024,18 @@
           }
         });
         // Host side: koi viewer dekhna chahta hai — us ko offer bhejein
+        s.on("viewers", function(d){ // v29: asli viewer count (server se)
+          if (!d || !room) return;
+          var myRoom = room.isHost ? myLiveRoomId : currentRoomId;
+          if (d.room !== myRoom) return;
+          room.viewers = d.count;
+          $("roomViewerCount").textContent = fmt(d.count);
+        });
         s.on("watcher", function(d){
-          if (!localStream || !myLiveRoomId || !d || d.room !== myLiveRoomId) return;
-          if (d.name) { watchers[d.watcherId] = d.name; renderWatcherList(); } // v8: watcher list
+          if (!myLiveRoomId || !d || d.room !== myLiveRoomId) return;
+          if (d.name) { watchers[d.watcherId] = d.name; renderWatcherList(); } // v29: list pehle — stream ho ya na ho
+          if (!localStream) return; // video/audio abhi nahi — PC baad mein (jab stream aaye, naya watcher dobara aayega)
+          // v8: watcher list (upar)
           closePCFor(d.watcherId);
           var pc = new RTCPeerConnection(RTC_CONF);
           hostPCs[d.watcherId] = pc;
@@ -2325,6 +2335,10 @@
         setAvatar(av, (room.data && room.data.hostAvatar) || (room.isHost && lastProfile ? lastProfile.avatar : ""), host.charAt(0)); // v24
         var ahc = $("audioHostCircle"); // v25: audio room mein host ki badi photo upar
         ahc.classList.toggle("show", !!(room.data && room.data.mode === 'audio'));
+        $("roomView").classList.toggle("audio-mode", !!(room.data && room.data.mode === 'audio')); // v29: audio layout — chat seats ke neeche
+        var badgeTxt = $("viewerLiveBadge").querySelector("span:last-child"); // v29: mode ka sahi naam
+        if (badgeTxt) badgeTxt.textContent = "LIVE · " + (room.data && room.data.mode === 'audio' ? "Audio only" : room.data && room.data.mode === 'multi' ? "Multi-guest" : "Real video");
+        $("themeBtn").style.display = (room.data && room.data.mode === 'video') ? "none" : ""; // v29: plain LIVE mein background nahi
         if (room.data && room.data.mode === 'audio') {
           setAvatar($("audioHostAv"), (room.data && room.data.hostAvatar) || (room.isHost && lastProfile ? lastProfile.avatar : ""), host.charAt(0));
           $("audioHostName").textContent = host;
@@ -2355,20 +2369,9 @@
         if (pkInfo) cleanupPk(); // v28: naya room — purani PK reset
         updatePkBtn(); // v28
       }
-      function startRoomLoops(pool, hostMode){
+      function startRoomLoops(pool, hostMode){ // v29: NAQLI chat/joins/viewers khatam — sirf asli log
         clearTimers();
         addChat("Welcome to the room! Follow the host and send gifts.", "join-msg");
-        var seed = hostMode ? 3 : 4;
-        for (var i = 0; i < seed; i++) simMessage(pool);
-        later(function(){ simMessage(pool); }, hostMode ? 2600 : 2100);
-        later(function(){ simJoin(); if (room) room.viewers += rand(1, 6); }, 5200);
-        later(function(){
-          if (!room) return;
-          room.viewers = Math.max(3, room.viewers + rand(-4, 9));
-          $("roomViewerCount").textContent = fmt(room.viewers);
-        }, 2400);
-        later(function(){ if (Math.random() < 0.75) flyHeart(); }, 1500);
-        later(function(){ simGift(hostMode); }, 11000);
         if (hostMode) {
           later(function(){
             if (!room) return;
@@ -2440,8 +2443,7 @@
           s.emit("chat message", { room: currentRoomId, name: myName(), text: v });
         } else {
           // Server nahi chal raha (file seedha kholi hai) — purana demo tareeqa:
-          addChat('<span class="who" style="color:#ffd166">You</span>' + esc(v), "mine");
-          if (Math.random() < 0.5) setTimeout(function(){ if (room) simMessage(MSGS); }, 1200);
+          addChat('<span class="who" style="color:#ffd166">You</span>' + esc(v), "mine"); // v29: offline mein bhi naqli jawab nahi
         }
       });
 
@@ -2571,6 +2573,7 @@
           liveMode = b.getAttribute("data-mode");
           document.querySelectorAll("#modeTabs .mode-tab").forEach(function(x){ x.classList.toggle("on", x === b); });
           renderGoLiveSeats();
+          $("goLiveBgField").style.display = (liveMode === 'video') ? "none" : ""; // v29: plain LIVE mein background nahi
         });
       });
       $("startLiveBtn").addEventListener("click", function(){
@@ -2588,7 +2591,7 @@
           myLiveRoomId = liveRoomId;
           room = {
             data: { title: title, host: myName(), cat: cat, mode: liveMode, multiGuest: liveMode !== 'video', hostAvatar: lastProfile ? lastProfile.avatar : "", theme: chosenTheme }, // v26
-            isHost: true, viewers: 2, likes: 0, following: true,
+            isHost: true, viewers: 0, likes: 0, following: true,
             gifts: 0, giftValue: 0, elapsed: 0
           };
           setupRoomUI(title, myName(), "#7a4fd0", fmtFull(myFollowersCount), IMG[chosenCover], "Your live stream cover");
@@ -2601,7 +2604,7 @@
           $("followBtn").style.display = "none";
           $("roomViewerCount").textContent = "2";
           startRoomLoops(HOST_MSGS, true);
-          setTimeout(function(){ if (room) { simJoin(); simJoin(); } }, 900);
+          // v29: simJoin khatam — sirf asli viewers
           liveConfirmed = false;
           toast("Live start ho raha hai…");
           liveConfirmTimer = setTimeout(function(){
@@ -2718,6 +2721,13 @@
       $("themeBtn").addEventListener("click", function(){ renderThemeGrid(); $("themeTray").classList.toggle("open"); }); // v26
       $("musicBtn").addEventListener("click", function(){ renderMusicGrid(); $("musicTray").classList.toggle("open"); }); // v24
       $("stopMusicBtn").addEventListener("click", function(){ stopMusic(); $("musicTray").classList.remove("open"); }); // v24
+      $("galleryMusicBtn").addEventListener("click", function(){ $("galleryMusicFile").click(); }); // v29: apni gallery se gaana
+      $("galleryMusicFile").addEventListener("change", function(){ // v29
+        var f = this.files && this.files[0]; if (!f) return;
+        var url = URL.createObjectURL(f);
+        startMusic({ name: f.name.replace(/\.[^.]+$/, ""), url: url });
+        this.value = "";
+      });
       $("musicVol").addEventListener("input", function(){ var v = this.value / 100; if (musicEl) musicEl.volume = v; if (musicGain) musicGain.gain.value = v; }); // v25: Mixer
       $("guestBtn").addEventListener("click", function(){ // v20
         if (myGuestSeat) leaveGuest(); else requestGuest();
