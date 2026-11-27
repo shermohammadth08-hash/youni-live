@@ -402,7 +402,7 @@
       #roomView.audio-mode #roomScroll { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
       #roomView.audio-mode .room-bottom { position: relative; flex-shrink: 0; }
       #roomView.audio-mode .chat { max-height: 26dvh; mask-image: none; -webkit-mask-image: none; } /* v41: chat thodi unchi + upar wala fade hata diya — line aadhi/kati hui na dikhe */
-      #roomView.audio-mode .watcher-panel { max-height: 18dvh; overflow-y: auto; }
+      #roomView.audio-mode .watcher-panel { max-height: 10dvh; overflow-y: auto; } /* v42: viewers panel chhota — chat bharne par seats kabhi chhupen gi nahi */
       #pkVideo { display: none; position: absolute; top: 170px; right: 10px; width: calc(50% - 14px); height: 38%; border-radius: 16px; object-fit: cover; background: #000; z-index: 4; }
       #pkVideo.show { display: block; }
       #roomView.pk-mode .room-video.show { top: 170px; left: 10px; right: auto; bottom: auto; width: calc(50% - 14px); height: 38%; border-radius: 16px; }
@@ -1091,6 +1091,12 @@
                 <span class="cnt" id="likeCount">0</span>
               </button>
             </div>
+          </div>
+          <div class="room-actions" id="hostChatRow" style="display:none">
+            <form class="chat-input" id="chatFormHost">
+              <input type="text" id="chatTextHost" placeholder="Type a message..." maxlength="120" autocomplete="off" />
+              <button type="submit">Send</button>
+            </form>
           </div>
           <div class="room-actions" id="hostActions" style="display:none">
             <p style="margin:0;font-size:.82rem;opacity:.9;flex:1">You're live — viewers are joining!</p>
@@ -2626,6 +2632,7 @@
         $("watcherPanel").style.display = room.isHost ? "" : "none";
         $("viewerActions").style.display = room.isHost ? "none" : "flex";
         $("hostActions").style.display = room.isHost ? "flex" : "none";
+        $("hostChatRow").style.display = room.isHost ? "flex" : "none"; // v43: host bhi neeche type kar sake — guest wali jagah par hi
         $("liveTimer").classList.toggle("show", room.isHost);
         $("roomView").classList.add("open");
         setCoins(coins);
@@ -2714,6 +2721,21 @@
         } else {
           // Server nahi chal raha (file seedha kholi hai) — purana demo tareeqa:
           addChat('<span class="who" style="color:#ffd166">You</span>' + esc(v), "mine"); // v29: offline mein bhi naqli jawab nahi
+        }
+      });
+      // v43: host ka apna chat form — guest wali jagah par hi type kare, wahi tareeqa
+      $("chatFormHost").addEventListener("submit", function(e){
+        e.preventDefault();
+        var v = $("chatTextHost").value.trim();
+        if (!v || !room) return;
+        if (v.length > 200) v = v.slice(0, 200);
+        $("chatTextHost").value = "";
+        var s = connectSocket();
+        var online = window.location.protocol !== "file:";
+        if (s && online && currentRoomId) {
+          s.emit("chat message", { room: currentRoomId, name: myName(), text: v });
+        } else {
+          addChat('<span class="who" style="color:#ffd166">You</span>' + esc(v), "mine");
         }
       });
 
