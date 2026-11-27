@@ -9,7 +9,7 @@
 // to users.json hamesha ki tarah app folder mein save hota hai (local mode).
 // GIFTS + COINS (v12): har user ke users.json record mein coins, beans
 // (gift se kamai), giftsReceived aur lastClaim (rozana free coins ki tareekh)
-// rehte hain. Naye user ko 1000 welcome coins; roz 500 free coins claim.
+// rehte hain. Naye user ko 5000 welcome coins; roz 500 free coins claim.
 // POST /api/gift se coins kat te hain aur host ke beans barhte hain; socket
 // par "gift" event se room ke sab log gift dekhte hain (nakli gift rokne ke
 // liye ek dafa ka token — sirf asal payment ke baad broadcast hota hai).
@@ -60,7 +60,7 @@ const GIFTS = { rose: 10, heart: 50, gem: 200, crown: 500, car: 1500, rocket: 30
 const DAILY_COINS = 500;
 const BOOST_COST = 100; // v57: Boost my room — 100 coins = 10 minute
 const BOOST_DURATION = 10 * 60 * 1000; // v57: Boost 10 minute chalta hai
-const WELCOME_COINS = 1000;
+const WELCOME_COINS = 5000; // v58: naya user — wallet mein shuru mein 5000 coins (pehle 1000 the)
 // v12: gift tokens — /api/gift kamyab ho to ek token banta hai; socket "gift"
 // handler sirf token dekh kar broadcast karta hai (bina payment ke nakli gift nahi).
 const giftTokens = [];
@@ -1480,6 +1480,24 @@ io.on("connection", (sock) => {
     joinedRoom = null;
   });
 });
+
+// v58: Ek dafa ka migration — sab ke wallet mein 5000 coins (user ki hidayat:
+// jitne bhi login hain aur jo aayenge, sab ke wallet saaf karke 5000 daal do).
+// Pehli dafa server chale to sab users ke coins 5000 kar do, phir flag file
+// bana do taake dobara na chale (restart par coins dobara reset na hon).
+(function migrateCoins5000(){
+  try {
+    const flag = path.join(DATA_DIR, "coins5000.done");
+    if (fs.existsSync(flag)) return;
+    const users = loadUsers();
+    const names = Object.keys(users);
+    if (!names.length) { fs.writeFileSync(flag, "done"); return; }
+    for (const n of names) { if (users[n] && typeof users[n] === "object") users[n].coins = 5000; }
+    if (!saveUsers(users)) return; // save na ho to flag na banao — agli dafa dobara try hoga
+    fs.writeFileSync(flag, "done");
+    console.log("Coins migration: " + names.length + " users ke coins 5000 kar diye.");
+  } catch (e) { console.error("Coins migration nahi hui:", e.message); }
+})();
 
 if (HOST_PORT) {
   // Public hosting: ek hi HTTP port, 0.0.0.0 par (platform khud HTTPS deta hai).

@@ -671,7 +671,10 @@
       /* v53: Bigo jaisa room header (upar) + room info sheet (neeche se khule) */
       .viewer-live-badge, .viewer-live-badge.show { display: none !important; } /* v56: "LIVE · Audio only" badge hata diya — sahi nahi lag raha tha; LIVE ki pehchan host circle (● LIVE) aur timer (ON AIR) se rehti hai */
       .host-pill { display: none !important; } /* v55: host pill (Younus + followers) PERMANENT — sirf ooper wala room header dikhe, ye duplicate na dikhe; eye + X + Follow button rehte hain */
-      .room-info-head { order: 0; align-self: flex-start; position: relative; z-index: 3; display: flex; align-items: center; gap: .55rem; max-width: 82%; background: rgba(10,10,16,.78); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: .3rem .7rem .3rem .32rem; color: #fff; cursor: pointer; text-align: left; margin-bottom: .35rem; box-sizing: border-box; } /* v54: div (button nahi) + gehra background + z-index — phone par header saaf dikhe */
+      .room-info-head { order: 0; align-self: flex-start; position: relative; z-index: 3; display: flex; align-items: center; gap: .55rem; max-width: 82%; background: rgba(10,10,16,.78); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: .3rem .7rem .3rem .32rem; color: #fff; cursor: pointer; text-align: left; margin-bottom: .35rem; box-sizing: border-box; }
+      .room-head-row { order: 0; display: flex; align-items: center; gap: .5rem; width: 100%; padding: .7rem .7rem 0; box-sizing: border-box; margin-bottom: .35rem; } /* v58: header + eye/X ek hi row mein (upar) */
+      .room-head-row .room-info-head { flex: 1 1 auto; min-width: 0; max-width: none; margin-bottom: 0; align-self: auto; } /* v58: header row mein — eye/X ke liye jagah chhode */
+      .room-head-row .room-top { flex: 0 0 auto; padding: 0; } /* v58: room-top row mein — padding wrapper se */ /* v54: div (button nahi) + gehra background + z-index — phone par header saaf dikhe */
       .rih-dp { width: 2.1rem; height: 2.1rem; border-radius: .5rem; overflow: hidden; flex-shrink: 0; background: #7a4fd0; }
       .rih-dp img { width: 100%; height: 100%; object-fit: cover; display: block; }
       .rih-text { display: flex; flex-direction: column; min-width: 0; }
@@ -1075,6 +1078,7 @@
         <div class="bg-shade"></div>
 
         <div id="roomScroll">
+        <div class="room-head-row">
         <div class="room-info-head" id="roomInfoHead" role="button" tabindex="0" aria-label="Room info">
           <span class="rih-dp"><img id="rihDpImg" alt="Room DP" onerror="this.style.display='none'"></span>
           <span class="rih-text">
@@ -1101,6 +1105,7 @@
           <button class="close-btn" id="closeRoomBtn" type="button" aria-label="Close room">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 5l14 14M19 5L5 19"/></svg>
           </button>
+        </div>
         </div>
         <div class="room-title-bar" id="roomTitleBar"></div>
         <div class="viewer-live-badge" id="viewerLiveBadge"><span class="dot"></span><span>LIVE · Real video</span></div>
@@ -1139,10 +1144,8 @@
           <div class="room-actions" id="hostActions" style="display:none">
             <p style="margin:0;font-size:.72rem;opacity:.9;flex:1">You're live — viewers are joining!</p>
             <button class="btn-cam" id="pkBtn" type="button">PK</button>
-            <button class="btn-cam" id="themeBtn" type="button">Theme</button>
             <button class="btn-cam" id="musicBtn" type="button">Music</button>
             <button class="btn-cam" id="camToggleBtn" type="button">Camera Off</button>
-            <button class="btn-end" id="endLiveBtn" type="button">End Live</button>
           </div>
         </div>
 
@@ -1396,7 +1399,7 @@
             $("allowFollowBtn").checked = d.allowFollow !== false;
           }).catch(function(){});
       }
-      /* v12: Asli coins/beans server se lein (naye user ko 1000 welcome coins,
+      /* v12: Asli coins/beans server se lein (naye user ko 5000 welcome coins,
          purane user ko bhi pehli dafa milte hain). File mode mein demo rehta hai. */
       function refreshWallet(){
         if (!currentUser || window.location.protocol === "file:") return;
@@ -1571,7 +1574,7 @@
           burst.classList.add("show");
           setTimeout(function(){ burst.classList.remove("show"); }, 950);
           addChat('<span class="who who-click" data-name="' + esc(d.from) + '" style="color:' + nameColor(d.from) + '">' + esc(d.from) + '</span> sent ' + g.name + ' to ' + esc(d.to), "gift-msg");
-          if (d.to === myName() && room) { room.gifts++; room.giftValue += d.cost; }
+          if (d.to === myName() && room) { room.gifts++; room.giftValue += d.cost; setBeans(beans + d.cost); } // v58: gift mile to beans foran barhein aur wallet mein dikhein
           flyHeart();
         });
         return socket;
@@ -2701,7 +2704,6 @@
         $("roomView").classList.toggle("audio-mode", !!(room.data && room.data.mode === 'audio')); // v29: audio layout — chat seats ke neeche
         var badgeTxt = $("viewerLiveBadge").querySelector("span:last-child"); // v29: mode ka sahi naam
         if (badgeTxt) badgeTxt.textContent = "LIVE · " + (room.data && room.data.mode === 'audio' ? "Audio only" : room.data && room.data.mode === 'multi' ? "Multi-guest" : "Real video");
-        $("themeBtn").style.display = (room.data && room.data.mode === 'video') ? "none" : ""; // v29: plain LIVE mein background nahi
         hostMicMuted = false; roomAdmins = []; // v32
         if (room.data && room.data.mode === 'audio') {
           setAvatar($("audioHostAv"), (room.data && room.data.hostAvatar) || (room.isHost && lastProfile ? lastProfile.avatar : ""), host.charAt(0));
@@ -3043,7 +3045,6 @@
         liveHistory.unshift({ title: title, meta: clock(dur) + " · " + totalViewers + " viewers · " + gifts + " gifts" });
         renderHistory();
       }
-      $("endLiveBtn").addEventListener("click", endLive);
       $("changePhotoBtn").addEventListener("click", function(){ $("avatarInput").click(); }); // v24
       $("avatarInput").addEventListener("change", function(){ // v24: photo 256px karke upload
         var f = this.files && this.files[0]; if (!f) return;
@@ -3123,7 +3124,6 @@
       });
       $("roomHostAvatar").addEventListener("click", function(){ openHostProfile(); }); // v32: host ki profile
       $("audioHostAv").addEventListener("click", function(){ openHostProfile(); });
-      $("themeBtn").addEventListener("click", function(){ renderThemeGrid(); $("themeTray").classList.toggle("open"); }); // v26
       $("themeTrayX").addEventListener("click", function(){ $("themeTray").classList.remove("open"); }); // v30: tray band karein
       $("musicTrayX").addEventListener("click", function(){ $("musicTray").classList.remove("open"); }); // v30
       $("pkTrayX").addEventListener("click", function(){ $("pkTray").classList.remove("open"); }); // v30
