@@ -1120,6 +1120,9 @@
         <div class="room-bottom">
           <div class="chat" id="chatBox"></div>
           <div class="room-actions" id="viewerActions">
+            <button class="round-btn" id="musicIconBtn" type="button" aria-label="Music" title="Music">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </button>
             <form class="chat-input" id="chatForm">
               <input type="text" id="chatText" placeholder="Type a message..." maxlength="120" autocomplete="off" />
               <button type="submit">Send</button>
@@ -1144,7 +1147,6 @@
           <div class="room-actions" id="hostActions" style="display:none">
             <p style="margin:0;font-size:.72rem;opacity:.9;flex:1">You're live — viewers are joining!</p>
             <button class="btn-cam" id="pkBtn" type="button">PK</button>
-            <button class="btn-cam" id="musicBtn" type="button">Music</button>
             <button class="btn-cam" id="camToggleBtn" type="button">Camera Off</button>
           </div>
         </div>
@@ -1209,7 +1211,9 @@
           <h3>Play Music</h3>
           <p class="bal-line">Songs play in your live — everyone hears them with your voice.</p>
           <button class="btn-cam" id="galleryMusicBtn" type="button" style="margin-bottom:.6rem">Pick from Gallery</button>
-          <input type="file" id="galleryMusicFile" accept="audio/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" />
+          <button class="btn-cam" id="musicFolderBtn" type="button" style="margin-bottom:.6rem">Pick Music Folder</button>
+          <input type="file" id="galleryMusicFile" accept="audio/*" multiple style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" />
+          <input type="file" id="musicFolderFile" webkitdirectory style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" />
           <p class="bal-line" id="musicNow" style="display:none"></p>
           <div class="gift-grid" id="musicGrid"></div>
           <div style="display:flex;align-items:center;gap:.6rem;margin-top:.6rem"><span style="font-size:.82rem;opacity:.85">Music volume</span><input type="range" id="musicVol" min="0" max="100" value="80" style="flex:1" /></div>
@@ -1903,6 +1907,12 @@
         { name: "Song 2 — Beat", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
         { name: "Song 3 — Groove", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" }
       ];
+      var MY_SONGS = []; // v59: phone ke gaane (Music folder ya Gallery se chune hue) — is session ke liye
+      function isAudioFile(f){ // v59: audio file pehchanein (type ya extension se)
+        if (!f) return false;
+        if (f.type && f.type.indexOf("audio/") === 0) return true;
+        return /\.(mp3|m4a|aac|wav|ogg|oga|flac|opus|mp4|m4b|wma)$/i.test(f.name || "");
+      }
       var musicCtx = null, musicEl = null, musicSrc = null, musicDest = null, micSrc = null, micStream = null, musicGain = null;
       var musicOn = false, musicName = "";
       function currentAudioTrack(){ // v24: music on ho to mic+music mixed track, warna mic
@@ -1961,6 +1971,19 @@
           b.addEventListener("click", function(){ startMusic(song); });
           g.appendChild(b);
         });
+        if (MY_SONGS.length) { // v59: phone ke gaane (folder ya gallery se chune hue)
+          var hd = document.createElement("p");
+          hd.className = "bal-line"; hd.style.margin = ".4rem 0 .3rem";
+          hd.textContent = "Your songs (" + MY_SONGS.length + ")";
+          g.appendChild(hd);
+          MY_SONGS.forEach(function(song){
+            var b = document.createElement("button");
+            b.type = "button"; b.className = "gift";
+            b.innerHTML = '<span class="gname">' + esc(song.name) + '</span>';
+            b.addEventListener("click", function(){ startMusic(song); });
+            g.appendChild(b);
+          });
+        }
         $("stopMusicBtn").style.display = musicOn ? "" : "none";
         var mn = $("musicNow"); // v29: gallery gaane ka naam
         if (mn) { mn.style.display = musicOn ? "" : "none"; if (musicOn) mn.textContent = "Now playing: " + musicName; }
@@ -2727,7 +2750,8 @@
         $("hostActions").style.display = room.isHost ? "flex" : "none";
         $("guestBtn").style.display = room.isHost ? "none" : ""; // v45: host ke liye Join-as-guest nahi
         $("giftBtn").style.display = room.isHost ? "none" : ""; // v45: host khud ko gift nahi bhejta
-        $("soundBtn").style.display = room.isHost ? "none" : ""; // v45: host ki apni preview ki awaz band hi rehti hai (echo na ho)        $("liveTimer").classList.toggle("show", room.isHost);
+        $("soundBtn").style.display = room.isHost ? "none" : ""; // v45: host ki apni preview ki awaz band hi rehti hai (echo na ho)
+        $("musicIconBtn").style.display = room.isHost ? "" : "none"; // v59: music icon sirf host ko dikhe (guest music nahi chalata)        $("liveTimer").classList.toggle("show", room.isHost);
         $("roomView").classList.add("open");
         setCoins(coins);
         viewerStreams = []; roomSeats = []; guestRequests = []; // v20: naye room ke liye saaf
@@ -3255,13 +3279,34 @@
       $("viewerEyeBtn").addEventListener("click", openViewersTray); // v50: asli <button>, click par tray khule
       $("viewerEyeBtn").addEventListener("touchstart", function(e){ e.preventDefault(); openViewersTray(); }, {passive:false}); // v50: mobile touch par bhi tray khule
       $("viewersTrayX").addEventListener("click", function(){ $("viewersTray").classList.remove("open"); });
-      $("musicBtn").addEventListener("click", function(){ renderMusicGrid(); $("musicTray").classList.toggle("open"); }); // v24
+      $("musicIconBtn").addEventListener("click", function(){ renderMusicGrid(); $("musicTray").classList.toggle("open"); }); // v59: music icon (chat row mein)
       $("stopMusicBtn").addEventListener("click", function(){ stopMusic(); $("musicTray").classList.remove("open"); }); // v24
       $("galleryMusicBtn").addEventListener("click", function(){ $("galleryMusicFile").click(); }); // v29: apni gallery se gaana
-      $("galleryMusicFile").addEventListener("change", function(){ // v29
-        var f = this.files && this.files[0]; if (!f) return;
-        var url = URL.createObjectURL(f);
-        startMusic({ name: f.name.replace(/\.[^.]+$/, ""), url: url });
+      $("galleryMusicFile").addEventListener("change", function(){ // v29: apni gallery se gaana (v59: ek se zyada bhi chun sakte hain)
+        var files = this.files || []; if (!files.length) return;
+        var firstNew = MY_SONGS.length, added = 0;
+        for (var i = 0; i < files.length; i++) {
+          var f = files[i]; if (!isAudioFile(f)) continue;
+          MY_SONGS.push({ name: f.name.replace(/\.[^.]+$/, ""), url: URL.createObjectURL(f), file: f });
+          added++;
+        }
+        renderMusicGrid();
+        if (added) { startMusic(MY_SONGS[firstNew]); toast(added + (added > 1 ? " songs added — tap any song to play." : " song added.")); }
+        else toast("No audio file selected.");
+        this.value = "";
+      });
+      $("musicFolderBtn").addEventListener("click", function(){ $("musicFolderFile").click(); }); // v59: phone ka Music folder chunein
+      $("musicFolderFile").addEventListener("change", function(){ // v59: folder ke saare audio gaane list mein aa jayein
+        var files = this.files || [];
+        var songs = [];
+        for (var i = 0; i < files.length; i++) {
+          var f = files[i]; if (!isAudioFile(f)) continue;
+          songs.push({ name: f.name.replace(/\.[^.]+$/, ""), url: URL.createObjectURL(f), file: f });
+        }
+        songs.sort(function(a, b){ return a.name.localeCompare(b.name); });
+        MY_SONGS = songs;
+        renderMusicGrid();
+        toast(songs.length ? songs.length + " songs found — tap one to play." : "No audio songs found in this folder.");
         this.value = "";
       });
       $("musicVol").addEventListener("input", function(){ var v = this.value / 100; if (musicEl) musicEl.volume = v; if (musicGain) musicGain.gain.value = v; }); // v25: Mixer
