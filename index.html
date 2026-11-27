@@ -401,7 +401,7 @@
       #roomScroll { display: contents; } /* v38: baaki modes mein wrapper ghayab — pehle jaisa hi layout */
       #roomView.audio-mode #roomScroll { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
       #roomView.audio-mode .room-bottom { position: relative; flex-shrink: 0; }
-      #roomView.audio-mode .chat { max-height: 22dvh; }
+      #roomView.audio-mode .chat { max-height: 26dvh; mask-image: none; -webkit-mask-image: none; } /* v41: chat thodi unchi + upar wala fade hata diya — line aadhi/kati hui na dikhe */
       #roomView.audio-mode .watcher-panel { max-height: 18dvh; overflow-y: auto; }
       #pkVideo { display: none; position: absolute; top: 170px; right: 10px; width: calc(50% - 14px); height: 38%; border-radius: 16px; object-fit: cover; background: #000; z-index: 4; }
       #pkVideo.show { display: block; }
@@ -1447,6 +1447,9 @@
         box.appendChild(d);
         while (box.children.length > 40) box.removeChild(box.firstChild);
         box.scrollTop = box.scrollHeight;
+        var _br = box.getBoundingClientRect(); // v41: upar wali line aadhi kati hui na dikhe
+        var _f = box.firstElementChild;
+        if (_f) { var _fr = _f.getBoundingClientRect(); if (_fr.top < _br.top && _fr.bottom > _br.top) box.scrollTop -= (_br.top - _fr.top); }
       }
       function nameColor(name){
         var h = 0; for (var i=0;i<name.length;i++) h = (h*31 + name.charCodeAt(i)) % 360;
