@@ -669,6 +669,7 @@
       /* v49: Bigo-style viewers tray — safed panel, photo + naam + level + XP bar */
       #viewersTray { background: #fff; color: #1a1a1a; min-height: 62dvh; max-height: 72dvh; display: flex; flex-direction: column; } /* v52: bara panel - Bigo jaisa, chahe 1 viewer ho to bhi upar tak */
       /* v53: Bigo jaisa room header (upar) + room info sheet (neeche se khule) */
+      .viewer-live-badge, .viewer-live-badge.show { display: none !important; } /* v56: "LIVE · Audio only" badge hata diya — sahi nahi lag raha tha; LIVE ki pehchan host circle (● LIVE) aur timer (ON AIR) se rehti hai */
       .host-pill { display: none !important; } /* v55: host pill (Younus + followers) PERMANENT — sirf ooper wala room header dikhe, ye duplicate na dikhe; eye + X + Follow button rehte hain */
       .room-info-head { order: 0; align-self: flex-start; position: relative; z-index: 3; display: flex; align-items: center; gap: .55rem; max-width: 82%; background: rgba(10,10,16,.78); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: .3rem .7rem .3rem .32rem; color: #fff; cursor: pointer; text-align: left; margin-bottom: .35rem; box-sizing: border-box; } /* v54: div (button nahi) + gehra background + z-index — phone par header saaf dikhe */
       .rih-dp { width: 2.1rem; height: 2.1rem; border-radius: .5rem; overflow: hidden; flex-shrink: 0; background: #7a4fd0; }
@@ -676,6 +677,7 @@
       .rih-text { display: flex; flex-direction: column; min-width: 0; }
       .rih-title { font-weight: 700; font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; }
       .rih-id { font-size: .72rem; opacity: .85; }
+      .rih-tag { display: inline-block; background: rgba(122,79,208,.92); color: #fff; font-size: .66rem; font-weight: 700; border-radius: 999px; padding: .1rem .45rem; margin-top: .15rem; width: fit-content; max-width: 11rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* v56: room tag header mein dikhe */
       .rih-bolt { margin-left: auto; background: linear-gradient(135deg,#ffb020,#ff7a1a); color: #fff; border-radius: 50%; width: 1.9rem; height: 1.9rem; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
       #roomInfoTray { background: #fff; color: #1a1a1a; max-height: 78dvh; }
       #roomInfoTray .rit-top { display: flex; gap: .8rem; align-items: flex-start; margin: .4rem 0 .9rem; }
@@ -1076,6 +1078,7 @@
           <span class="rih-text">
             <span class="rih-title" id="rihTitle">Live</span>
             <span class="rih-id" id="rihId">ID: —</span>
+            <span class="rih-tag" id="rihTag" style="display:none"></span>
           </span>
           <span class="rih-bolt" aria-hidden="true">⚡</span>
         </div>
@@ -2568,6 +2571,7 @@
           if (!d || !room || d.tag === undefined) return;
           if (room.data) room.data.tag = d.tag;
           $("ritTagVal").textContent = d.tag || "No tag";
+          setRoomTag(d.tag); // v56: header mein bhi tag dikhe
         });
         s.on("room level", function(d){ // v55: Room level up hua — sheet mein level update karein
           if (!d || !room || d.roomLevel === undefined) return;
@@ -2668,6 +2672,7 @@
         $("roomTitleBar").textContent = title;
         var _rih = $("rihDpImg"); if (_rih) { _rih.style.display = ""; _rih.src = coverSrc(img); } // v54: coverSrc — data URI / key / gradient sab chale, khaali na rahe
         var _rihT = $("rihTitle"); if (_rihT) _rihT.textContent = title || "Live"; // v54: title khaali ho to "Live" dikhe
+        setRoomTag((room.data && room.data.tag) || ""); // v56: header mein tag
         var _rihI = $("rihId"); if (_rihI) _rihI.textContent = "ID: " + ((room.isHost && lastProfile && lastProfile.id) ? lastProfile.id : ((room.data && room.data.hostIdNum) || host));
         var _ritD = $("ritDpImg"); if (_ritD) _ritD.src = img;
         $("roomHostName").textContent = host;
@@ -3120,6 +3125,11 @@
         var roomExp = (d.roomExp) || 0;
         return { title: d.title || "Live", host: d.host || "Host", cover: d.cover || d.theme || "singer", tag: d.tag || "", idNum: hostIdNum, level: roomLevel, roomExp: roomExp };
       }
+      function setRoomTag(tag){ // v56: room tag header mein dikhayein (khaali ho to chhupayein)
+        var _rt = $("rihTag"); if (!_rt) return;
+        if (tag) { _rt.textContent = tag; _rt.style.display = "inline-block"; }
+        else { _rt.textContent = ""; _rt.style.display = "none"; }
+      }
       function setRoomInfoDp(){
         var info = roomInfoData(); if (!info) return;
         var src = coverSrc(info.cover);
@@ -3129,6 +3139,7 @@
       function openRoomInfo(){
         var info = roomInfoData(); if (!info) return;
         setRoomInfoDp();
+        setRoomTag(info.tag); // v56: header mein bhi tag dikhe (sheet khulte hi)
         $("rihTitle").textContent = info.title;
         $("rihId").textContent = "ID: " + (info.idNum || info.host);
         $("ritTitle").textContent = info.title;
@@ -3189,6 +3200,7 @@
         if (t === null) return;
         var s = connectSocket();
         if (s) s.emit("room tag", { room: myLiveRoomId || currentRoomId, tag: (t || "").trim() });
+        toast((t || "").trim() ? "Tag set: " + (t || "").trim() : "Tag removed."); // v56: saaf confirmation
       });
       $("ritAnnRow").addEventListener("click", function(){
         if (!room || !room.isHost) { toast("Only the host can post an announcement."); return; }
@@ -3199,6 +3211,7 @@
         var s = connectSocket();
         if (s) s.emit("room announcement", { room: myLiveRoomId || currentRoomId, text: t });
         toast("Announcement posted.");
+        $("roomInfoTray").classList.remove("open"); // v56: sheet band karein taake host ko chat mein 📢 elaan dikhe
       });
       $("ritBoostBtn").addEventListener("click", function(){
         toast("Boost jald aayega — iske liye payment system chahiye.");
