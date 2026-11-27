@@ -1908,6 +1908,40 @@
         { name: "Song 3 — Groove", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" }
       ];
       var MY_SONGS = []; // v59: phone ke gaane (Music folder ya Gallery se chune hue) — is session ke liye
+      // apk: native Android app (MediaStore) — phone ke saare gaane, Bigo jaisa.
+      // Sirf APK mein chalta hai (window.AndroidMusic bridge). Browser mein ye
+      // maujood nahi hota to chup chaap fallback (folder/gallery) rehta hai.
+      var nativeSongsLoaded = false;
+      function loadNativeSongs(force){
+        try {
+          if (typeof window.AndroidMusic === "undefined" || !window.AndroidMusic.getSongs) return false;
+          if (nativeSongsLoaded && !force) return true;
+          var raw = window.AndroidMusic.getSongs();
+          if (!raw) return false;
+          var res = JSON.parse(raw);
+          if (res && res.status === "permission_needed") {
+            toast("Music permission chahiye — Allow dabayein.");
+            try { window.AndroidMusic.requestPermission(); } catch (e) {}
+            return false;
+          }
+          if (!res || res.status !== "ok" || !res.songs || !res.songs.length) return false;
+          var seen = {};
+          MY_SONGS.forEach(function(s){ seen[s.name] = true; });
+          res.songs.forEach(function(s){
+            if (!s || !s.title) return;
+            var nm = s.title + (s.artist ? " — " + s.artist : "");
+            if (seen[nm]) return;
+            seen[nm] = true;
+            MY_SONGS.push({ name: nm, url: s.uri || "", file: null });
+          });
+          nativeSongsLoaded = true;
+          return true;
+        } catch (e) { return false; }
+      }
+      window.__nativeSongsReady = function(){ // apk: permission milne par native side se call hota hai
+        loadNativeSongs(true);
+        renderMusicGrid();
+      };
       function isAudioFile(f){ // v59: audio file pehchanein (type ya extension se)
         if (!f) return false;
         if (f.type && f.type.indexOf("audio/") === 0) return true;
@@ -1971,6 +2005,7 @@
           b.addEventListener("click", function(){ startMusic(song); });
           g.appendChild(b);
         });
+        loadNativeSongs(); // apk: native app ho to phone ke saare gaane bhi laayein (MediaStore)
         if (MY_SONGS.length) { // v59: phone ke gaane (folder ya gallery se chune hue)
           var hd = document.createElement("p");
           hd.className = "bal-line"; hd.style.margin = ".4rem 0 .3rem";
