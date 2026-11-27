@@ -832,6 +832,17 @@ function broadcastViewers(roomId){ // v29
   if (!liveRooms[roomId]) return;
   io.to(roomId).emit("viewers", { room: roomId, count: roomViewerCount(roomId) });
 }
+function isRoomAdmin(sock, roomId){ // v32: room admin — host ne banaya ho
+  const r = liveRooms[roomId]; if (!r || !r.admins) return false;
+  const n = ((sock.data && sock.data.userName) || "").toLowerCase();
+  return !!n && r.admins.some((a) => (a || "").toLowerCase() === n);
+}
+function broadcastLiveList(){ // v32: Home cards update karein (room DP badli ho to)
+  for (const [, x] of io.sockets.sockets) {
+    const vn = (x.data && x.data.userName) || "";
+    x.emit("live list", liveListFor(vn));
+  }
+}
 function liveListFor(viewerName){
   return Object.keys(liveRooms)
     .filter((rid) => !roomHiddenFor(viewerName, liveRooms[rid].host))
@@ -910,6 +921,7 @@ io.on("connection", (sock) => {
       broadcastViewers(roomId); // v29: naya viewer aaya — count update
       sock.emit("live started", Object.assign({ room: roomId }, liveRooms[roomId]));
       sock.emit("guest seats", { room: roomId, seats: seatsPayload(roomId) }); // v20
+      sock.emit("room admins", { room: roomId, admins: liveRooms[roomId].admins || [] }); // v32
     }
   });
 
@@ -980,7 +992,8 @@ io.on("connection", (sock) => {
     const title = typeof data.title === "string" ? data.title.slice(0, 60) : "Live";
     const host = typeof data.host === "string" ? data.host.slice(0, 30) : "Host";
     const cat = typeof data.cat === "string" ? data.cat.slice(0, 20) : "Chat";
-    const cover = typeof data.cover === "string" ? data.cover.slice(0, 30) : "singer";
+    const rawCover = typeof data.cover === "string" ? data.cover : "singer"; // v32: gallery DP (data URL) ya built-in cover
+    const cover = (rawCover.startsWith("data:image/") && rawCover.length <= 200000) ? rawCover : (rawCover.length <= 30 ? rawCover : "singer");
     liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, theme: (typeof data.theme === "string" && data.theme.length <= 20) ? data.theme.slice(0, 20) : cover, multiGuest: data.multiGuest !== false, mode: typeof data.mode === "string" ? data.mode.slice(0, 10) : "video", cameraOn: true }; // v23, v26 theme
     if (!sock.data.userName) sock.data.userName = host;
     emitLiveStarted(Object.assign({ room: roomId }, liveRooms[roomId]));
@@ -991,6 +1004,18 @@ io.on("connection", (sock) => {
     const roomId = typeof data.room === "string" ? data.room : "";
     if (!isHostOf(sock.id, roomId)) return;
     endLiveRoom(roomId);
+  });
+  sock.on("room cover", (data) => { // v32: host room DP badle (gallery se) — sab ko dikhe + Home card update
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    if (!isHostOf(sock.id, roomId) || !liveRooms[roomId]) return;
+    const cover = typeof data.cover === "string" ? data.cover : "";
+    const ok = (cover.startsWith("data:image/") && cover.length <= 200000) || (cover.length <= 30 && /^[a-z0-9_-]+$/i.test(cover));
+    if (!ok) return;
+    liveRooms[roomId].cover = cover;
+    liveRooms[roomId].theme = cover;
+    io.to(roomId).emit("room cover", { room: roomId, cover: cover });
+    broadcastLiveList();
   });
   sock.on("room theme", (data) => { // v26: host background badle — sab viewers ko batayein
     if (!data || typeof data !== "object") return;
@@ -1089,7 +1114,8 @@ io.on("connection", (sock) => {
     if (socketRoom[guestId] !== roomId) return; // guest ab room mein nahi
     const seats = seatsFor(roomId);
     if (seats.some((x) => x && x.guestId === guestId)) return;
-    const idx = seats.findIndex((x) => !x);
+    const wantSeat = parseInt(data.seat, 10); // v32: host seat chune — khaali ho to wahi, warna pehli khaali
+    const idx = (wantSeat >= 1 && wantSeat <= seats.length && !seats[wantSeat - 1]) ? wantSeat - 1 : seats.findIndex((x) => !x);
     if (idx === -1) { sock.emit("guest request failed", { room: roomId, reason: "full" }); return; }
     guestSeq[roomId] = (guestSeq[roomId] || 0) + 1;
     seats[idx] = { seat: idx + 1, guestId: guestId, name: name, seq: guestSeq[roomId] };
@@ -1116,8 +1142,82 @@ io.on("connection", (sock) => {
     if (!data || typeof data !== "object") return;
     const roomId = typeof data.room === "string" ? data.room : "";
     const guestId = typeof data.guestId === "string" ? data.guestId : "";
-    if (!isHostOf(sock.id, roomId)) return;
+    if (!isHostOf(sock.id, roomId) && !isRoomAdmin(sock, roomId)) return; // v32: admin bhi kick kar sakta hai
     if (freeGuestSeat(roomId, guestId)) io.to(guestId).emit("guest removed", { room: roomId });
+  });
+
+  // v32: Kick viewer — room se nikaale, block NA kare (block alag option hai)
+  sock.on("kick viewer", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const target = cleanName(data.target);
+    if (!roomId || !target || !liveRooms[roomId]) return;
+    if (!isHostOf(sock.id, roomId) && !isRoomAdmin(sock, roomId)) return;
+    if (liveRooms[roomId].host.toLowerCase() === target.toLowerCase()) return; // host ko kick nahi
+    for (const [, x] of io.sockets.sockets) {
+      const sName = (x.data && x.data.userName) || "";
+      if (sName && sName.toLowerCase() === target.toLowerCase() && x.rooms.has(roomId)) {
+        x.leave(roomId);
+        if (socketRoom[x.id] === roomId) delete socketRoom[x.id];
+        x.emit("you were kicked", { room: roomId, message: "The host removed you from this live." });
+      }
+    }
+    sock.emit("viewer kicked", { room: roomId, target: target });
+  });
+
+  // v32: Host invite — viewer ko guest banne ki request bheje (seat ke saath)
+  sock.on("guest invite", (data) => {
+    if (!data || typeof data !== "object") return;
+    const to = typeof data.to === "string" ? data.to : "";
+    const seat = parseInt(data.seat, 10);
+    if (!joinedRoom || !isHostOf(sock.id, joinedRoom) || !to) return;
+    if (socketRoom[to] !== joinedRoom) return; // target room mein nahi
+    if (!seat || seat < 1 || seat > seatCount(joinedRoom)) return;
+    if (seatsFor(joinedRoom)[seat - 1]) return; // seat bhari hui
+    io.to(to).emit("guest invite", { from: liveRooms[joinedRoom].host, room: joinedRoom, seat: seat });
+  });
+  sock.on("guest invite accept", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const wantSeat = parseInt(data.seat, 10);
+    if (!roomId || socketRoom[sock.id] !== roomId || !liveRooms[roomId]) return;
+    const seats = seatsFor(roomId);
+    if (seats.some((x) => x && x.guestId === sock.id)) return;
+    const idx = (wantSeat >= 1 && wantSeat <= seats.length && !seats[wantSeat - 1]) ? wantSeat - 1 : seats.findIndex((x) => !x);
+    if (idx === -1) { sock.emit("guest request failed", { room: roomId, reason: "full" }); return; }
+    const name = cleanName((sock.data && sock.data.userName) || "") || "Guest";
+    guestSeq[roomId] = (guestSeq[roomId] || 0) + 1;
+    seats[idx] = { seat: idx + 1, guestId: sock.id, name: name, seq: guestSeq[roomId] };
+    io.to(sock.id).emit("guest approved", { room: roomId, seat: idx + 1, hostId: liveRooms[roomId].hostId });
+    broadcastSeats(roomId);
+  });
+  sock.on("guest invite decline", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    if (!roomId || socketRoom[sock.id] !== roomId || !liveRooms[roomId]) return;
+    io.to(liveRooms[roomId].hostId).emit("guest invite declined", { room: roomId, name: (sock.data && sock.data.userName) || "Guest" });
+  });
+
+  // v32: Room admin — host kisi ko admin banaye / hataye
+  sock.on("make admin", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const target = cleanName(data.target);
+    if (!roomId || !target || !liveRooms[roomId]) return;
+    if (!isHostOf(sock.id, roomId)) return;
+    if (liveRooms[roomId].host.toLowerCase() === target.toLowerCase()) return;
+    liveRooms[roomId].admins = liveRooms[roomId].admins || [];
+    if (!liveRooms[roomId].admins.some((a) => a.toLowerCase() === target.toLowerCase())) liveRooms[roomId].admins.push(target);
+    io.to(roomId).emit("room admins", { room: roomId, admins: liveRooms[roomId].admins });
+  });
+  sock.on("remove admin", (data) => {
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    const target = cleanName(data.target);
+    if (!roomId || !target || !liveRooms[roomId]) return;
+    if (!isHostOf(sock.id, roomId)) return;
+    liveRooms[roomId].admins = (liveRooms[roomId].admins || []).filter((a) => a.toLowerCase() !== target.toLowerCase());
+    io.to(roomId).emit("room admins", { room: roomId, admins: liveRooms[roomId].admins });
   });
 
   // v31: Mute system — guest khud ko mute kare; host guest ko mute kare (guest khud unmute nahi kar sakta)
@@ -1132,7 +1232,7 @@ io.on("connection", (sock) => {
   sock.on("guest mute", (data) => {
     if (!data || typeof data !== "object") return;
     const guestId = typeof data.guestId === "string" ? data.guestId : "";
-    if (!joinedRoom || !isHostOf(sock.id, joinedRoom) || !guestId) return;
+    if (!joinedRoom || (!isHostOf(sock.id, joinedRoom) && !isRoomAdmin(sock, joinedRoom)) || !guestId) return; // v32: admin bhi mute kar sakta hai
     const seat = seatsFor(joinedRoom).find((x) => x && x.guestId === guestId);
     if (!seat) return;
     seat.hostMuted = !!data.muted;
@@ -1188,6 +1288,10 @@ io.on("connection", (sock) => {
     // watcher ke naam ke saath Block button dekhega.
     const wname = cleanName(data.name) || (sock.data && sock.data.userName) || "";
     io.to(liveRooms[roomId].hostId).emit("watcher", { watcherId: sock.id, room: roomId, name: wname });
+    if (wname && sock.data.welcomedRoom !== roomId) { // v32: Bigo jaisa entry welcome — sab ko dikhe
+      sock.data.welcomedRoom = roomId;
+      emitChatToRoom(roomId, { room: roomId, name: "System", text: "Welcome, " + wname + "!" });
+    }
   });
 
   // v8: host apne live room ke watcher ko block kare — sirf host kar sakta hai.

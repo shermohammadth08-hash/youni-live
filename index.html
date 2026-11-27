@@ -456,12 +456,24 @@
       .round-btn.off { opacity: .45; }
       .guest-tile video { width: 100%; height: 100%; object-fit: cover; }
       .guest-tile .gname { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font-size: .62rem; font-weight: 700; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .guest-tile .gkick { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: .75rem; line-height: 1; cursor: pointer; pointer-events: auto; }
       .guest-tile .gmute { display: none; position: absolute; top: 2px; right: 26px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; cursor: pointer; pointer-events: auto; align-items: center; justify-content: center; padding: 0; }
       .guest-tile .gmute.show { display: flex; }
       .guest-tile .gmute svg { width: 12px; height: 12px; }
       .guest-tile .gmute.off { background: rgba(220,38,38,.9); }
       .guest-tile .gmute:disabled { opacity: .55; cursor: default; } /* v31: host ne mute kiya — guest khud unmute nahi kar sakta */
+      .profile-pop { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 60; } /* v32 */
+      .profile-pop.open { display: flex; }
+      .pp-card { width: 86%; max-width: 320px; background: #17141f; border: 1px solid rgba(255,255,255,.14); border-radius: 16px; padding: 1rem; text-align: center; color: #fff; }
+      .pp-av { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto .5rem; background: #7a4fd0; color: #fff; font-size: 1.6rem; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+      .pp-av img { width: 100%; height: 100%; object-fit: cover; }
+      .pp-name { font-weight: 700; font-size: 1.05rem; }
+      .pp-tag { font-size: .75rem; opacity: .7; margin: .15rem 0 .7rem; }
+      .pp-btn { display: block; width: 100%; margin-top: .45rem; padding: .6rem; border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.07); color: #fff; font-size: .9rem; cursor: pointer; }
+      .pp-btn.danger { background: rgba(220,38,38,.85); border-color: transparent; }
+      .pp-btn.gold { background: #b8860b; border-color: transparent; }
+      .watcher-row { cursor: pointer; }
+      .seat-num { min-width: 28px; height: 28px; padding: 0 .35rem; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.1); color: #fff; font-size: .8rem; cursor: pointer; }
+      .host-pill .avatar, #audioHostAv { cursor: pointer; }
       .round-btn.guest-on { background: #e8334d; color: #fff; }
       .guest-reqs { border-top: 1px solid rgba(255,255,255,.15); margin-top: .5rem; padding-top: .5rem; }
       .viewer-live-badge { position: relative; z-index: 3; margin: .45rem .85rem 0; display: none; align-items: center; gap: .35rem; font-size: .74rem; font-weight: 800; }
@@ -1073,7 +1085,6 @@
             <button class="btn-cam" id="pkBtn" type="button">PK</button>
             <button class="btn-cam" id="themeBtn" type="button">Theme</button>
             <button class="btn-cam" id="musicBtn" type="button">Music</button>
-            <button class="btn-cam" id="hostMicBtn" type="button">Mic Off</button>
             <button class="btn-cam" id="camToggleBtn" type="button">Camera Off</button>
             <button class="btn-end" id="endLiveBtn" type="button">End Live</button>
           </div>
@@ -1116,6 +1127,36 @@
           <div style="display:flex;align-items:center;gap:.6rem;margin-top:.6rem"><span style="font-size:.82rem;opacity:.85">Music volume</span><input type="range" id="musicVol" min="0" max="100" value="80" style="flex:1" /></div>
           <button class="btn-cam" id="stopMusicBtn" type="button" style="margin-top:.6rem;display:none">Stop music</button>
         </div>
+
+        <!-- v32: Profile popup — kisi ki profile par tap karein to options -->
+        <div class="profile-pop" id="profilePop">
+          <div class="pp-card">
+            <div class="pp-av" id="ppAvatar">?</div>
+            <div class="pp-name" id="ppName"></div>
+            <div class="pp-tag" id="ppTag"></div>
+            <div id="ppButtons"></div>
+            <button class="pp-btn" id="ppClose" type="button">Close</button>
+          </div>
+        </div>
+
+        <!-- v32: Invite popup — host ne guest banne ki invite bheji -->
+        <div class="profile-pop" id="invitePop">
+          <div class="pp-card">
+            <div class="pp-name" id="inviteText"></div>
+            <div class="pp-tag">Tap Accept to join as a guest</div>
+            <button class="pp-btn gold" id="inviteAccept" type="button">Accept</button>
+            <button class="pp-btn" id="inviteDecline" type="button">Decline</button>
+          </div>
+        </div>
+
+        <!-- v32: Invite picker — host khaali seat par tap kare to viewer chune -->
+        <div class="gift-tray" id="inviteTray">
+          <button class="tray-x" id="inviteTrayX" type="button" aria-label="Close">✕</button>
+          <h3>Invite a viewer</h3>
+          <p class="bal-line">Pick who sits on this seat.</p>
+          <div id="inviteList"></div>
+        </div>
+        <input type="file" id="galleryCoverFile" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" />
 
         <!-- v13: followers / following list -->
         <div class="gift-tray user-sheet" id="followSheet">
@@ -1330,14 +1371,14 @@
         el.className = featured ? "feat-card" : "room-card";
         if (featured) {
           el.innerHTML =
-            '<img src="' + IMG[r.img] + '" alt="' + r.host + '\'s live room" />' +
+            '<img src="' + coverSrc(r.img) + '" alt="' + r.host + '\'s live room" />' +
             '<span class="live-badge">LIVE</span>' +
             '<span class="viewers">' + eyeSVG() + fmt(r.viewers) + '</span>' +
             '<span class="shade"></span>' +
             '<span class="meta"><p class="t">' + r.title + '</p><p class="h">' + r.host + ' · ' + r.cat + (r.mode === 'audio' ? ' · Audio' : r.mode === 'multi' ? ' · Multi-guest' : '') + '</p></span>';
         } else {
           el.innerHTML =
-            '<span class="thumb"><img src="' + IMG[r.img] + '" alt="' + r.host + '\'s live room" loading="lazy" />' +
+            '<span class="thumb"><img src="' + coverSrc(r.img) + '" alt="' + r.host + '\'s live room" loading="lazy" />' +
             '<span class="live-badge">LIVE</span>' +
             '<span class="viewers">' + eyeSVG() + fmt(r.viewers) + '</span></span>' +
             '<span class="info"><p class="title">' + r.title + '</p>' +
@@ -1495,6 +1536,29 @@
       var myMicMuted = false, hostMutedMe = false, hostMicMuted = false; // v31: mute system
       var MIC_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>';
       var MIC_OFF_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3M4 4l16 16"/></svg>';
+      var galleryCoverMode = 'golive'; // v32: gallery DP — golive ya theme tray
+      function downscaleImageFile(file, maxDim, quality, cb){ // v32: gallery photo chhoti karein (socket limit)
+        var img = new Image();
+        var url = URL.createObjectURL(file);
+        img.onload = function(){
+          var w = img.width, h = img.height;
+          var s = Math.min(1, maxDim / Math.max(w, h));
+          var c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          cb(c.toDataURL("image/jpeg", quality));
+        };
+        img.onerror = function(){ URL.revokeObjectURL(url); toast("Could not read that photo."); };
+        img.src = url;
+      }
+      function toggleHostMic(){ // v32: host khud ko mute kare — ab apni profile se (neeche wala button hata diya)
+        var tr = localStream && localStream.getAudioTracks()[0];
+        if (!tr) { toast("Mic is not on."); return hostMicMuted; }
+        hostMicMuted = !hostMicMuted;
+        tr.enabled = !hostMicMuted;
+        return hostMicMuted;
+      }
       function applyMyMic(){ // v31: guest ki awaz — host-mute ya self-mute, koi ek bhi ho to band
         var tr = (typeof guestStream !== "undefined" && guestStream) ? guestStream.getAudioTracks()[0] : null;
         if (tr) tr.enabled = !(myMicMuted || hostMutedMe);
@@ -1663,13 +1727,14 @@
       ];
       var currentTheme = "singer"; // v26
       function themeIsGradient(theme){ return THEMES.some(function(t){ return t.id === theme; }); }
+      function coverSrc(k){ return (k && k.indexOf("data:") === 0) ? k : (IMG[k] || IMG["singer"]); } // v32: gallery DP (data URL) ya built-in cover
       function applyRoomTheme(theme){
         var bg = $("roomBg"), th = $("roomBgTheme");
         var mode = room && room.data ? room.data.mode : "";
         if (mode === 'video') { bg.style.display = "none"; th.style.display = "none"; return; } // v29: plain LIVE mein background nahi
         var g = THEMES.find(function(t){ return t.id === theme; });
         if (g) { bg.style.display = "none"; th.style.background = g.css; th.style.display = "block"; } // v30 FIX: "" wapas CSS display:none par le jata tha — gradient kabhi dikhta hi nahi tha
-        else { th.style.display = "none"; bg.src = IMG[theme] || IMG["singer"]; bg.style.display = "block"; }
+        else { th.style.display = "none"; bg.src = coverSrc(theme); bg.style.display = "block"; }
       }
       function roomBgShow(){ var mode = room && room.data ? room.data.mode : ""; if (mode === 'video') { roomBgHide(); return; } if (themeIsGradient(currentTheme)) { $("roomBg").style.display = "none"; $("roomBgTheme").style.display = "block"; } else { $("roomBgTheme").style.display = "none"; $("roomBg").style.display = "block"; } } // v30 FIX: block, "" nahi
       function roomBgHide(){ $("roomBg").style.display = "none"; $("roomBgTheme").style.display = "none"; }
@@ -1806,7 +1871,7 @@
         while (wrap.children.length < count) {
           var t = document.createElement("div");
           t.className = "guest-tile";
-          t.innerHTML = '<video autoplay playsinline muted></video><span class="gavatar"></span><span class="gname"></span><span class="geq"><i></i><i></i><i></i></span><span class="seat-chair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 11V7a2 2 0 012-2h8a2 2 0 012 2v4"/><path d="M4 11h16v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3z"/><path d="M6 16v3M18 16v3"/></svg><b>+</b></span><button type="button" class="gkick" aria-label="Remove guest">\u00d7</button><button type="button" class="gmute" aria-label="Mute or unmute"></button>';
+          t.innerHTML = '<video autoplay playsinline muted></video><span class="gavatar"></span><span class="gname"></span><span class="geq"><i></i><i></i><i></i></span><span class="seat-chair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 11V7a2 2 0 012-2h8a2 2 0 012 2v4"/><path d="M4 11h16v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3z"/><path d="M6 16v3M18 16v3"/></svg><b>+</b></span><button type="button" class="gmute" aria-label="Mute or unmute"></button>';
           wrap.appendChild(t);
         }
         while (wrap.children.length > count) wrap.removeChild(wrap.lastChild);
@@ -1816,8 +1881,7 @@
           var seat = ordered[i] || null;
           var vid = tile.querySelector("video");
           var nm = tile.querySelector(".gname");
-          var kick = tile.querySelector(".gkick");
-          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; kick.style.display = "none"; var _m = tile.querySelector(".gmute"); if (_m) { _m.classList.remove("show"); _m.onclick = null; } tile.onclick = null; var guestsOn = room && room.data && room.data.multiGuest !== false && room.data.mode !== 'video'; if (isAudio) { tile.classList.add("empty"); nm.textContent = ""; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } } else if (guestsOn) { tile.classList.add("empty"); nm.textContent = room.isHost ? "Empty seat" : "+ Join"; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
+          if (!seat) { tile.classList.remove("on"); tile.classList.remove("audio"); if (vid.srcObject) vid.srcObject = null; var _m = tile.querySelector(".gmute"); if (_m) { _m.classList.remove("show"); _m.onclick = null; } tile.onclick = null; var guestsOn = room && room.data && room.data.multiGuest !== false && room.data.mode !== 'video'; if (isAudio) { tile.classList.add("empty"); nm.textContent = ""; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } else { tile.onclick = (function(sn){ return function(){ openInvitePicker(sn); }; })(i + 1); } } else if (guestsOn) { tile.classList.add("empty"); nm.textContent = room.isHost ? "Empty seat" : "+ Join"; if (!room.isHost) { tile.onclick = function(){ requestGuest(); }; } else { tile.onclick = (function(sn){ return function(){ openInvitePicker(sn); }; })(i + 1); } } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
           tile.classList.add("on"); tile.classList.remove("empty"); tile.onclick = null;
           var mute = tile.querySelector(".gmute"); // v31: mute button / indicator
           if (mute) {
@@ -1849,10 +1913,7 @@
           if (stream && vid.srcObject !== stream) { vid.srcObject = stream; vid.play().catch(function(){}); }
           else if (stream) { vid.play().catch(function(){}); }
           else if (!stream && vid.srcObject) { vid.srcObject = null; }
-          if (room && room.isHost) {
-            kick.style.display = "";
-            kick.onclick = (function(gid){ return function(){ kickGuest(gid); }; })(seat.guestId);
-          } else kick.style.display = "none";
+          tile.onclick = function(){ openUserProfile({ name: seat.name, guestId: seat.guestId, seat: seat.seat, avatar: seat.avatar || "", isAdmin: isRoomAdminName(seat.name), isHost: false }); }; // v32: tile par tap — profile popup (kick ab profile mein hai)
         }
       }
       function renderGuestBtn(){
@@ -1886,9 +1947,9 @@
         renderGuestBtn();
         renderGuestTiles();
       }
-      function approveGuest(guestId, name){
+      function approveGuest(guestId, name, seat){
         var s = connectSocket();
-        if (s && myLiveRoomId) s.emit("guest approve", { room: myLiveRoomId, guestId: guestId, name: name });
+        if (s && myLiveRoomId) s.emit("guest approve", { room: myLiveRoomId, guestId: guestId, name: name, seat: seat });
         guestRequests = guestRequests.filter(function(r){ return r.guestId !== guestId; });
         renderGuestRequests();
       }
@@ -1913,13 +1974,21 @@
           row.className = "watcher-row";
           var nm = document.createElement("span");
           nm.className = "wname"; nm.textContent = r.name;
-          var ok = document.createElement("button");
-          ok.type = "button"; ok.className = "watcher-block"; ok.textContent = "Approve";
-          ok.addEventListener("click", function(){ approveGuest(r.guestId, r.name); });
+          row.appendChild(nm);
+          var count = (room && room.data && room.data.mode === 'audio') ? 8 : 4; // v32: host seat chune
+          for (var s = 1; s <= count; s++) {
+            if (roomSeats.some(function(x){ return x && x.seat === s; })) continue; // bhari seat
+            (function(seatNo){
+              var b = document.createElement("button");
+              b.type = "button"; b.className = "seat-num"; b.textContent = seatNo; b.title = "Seat " + seatNo;
+              b.addEventListener("click", function(){ approveGuest(r.guestId, r.name, seatNo); });
+              row.appendChild(b);
+            })(s);
+          }
           var no = document.createElement("button");
           no.type = "button"; no.className = "watcher-block"; no.textContent = "Reject";
           no.addEventListener("click", function(){ rejectGuest(r.guestId); });
-          row.appendChild(nm); row.appendChild(ok); row.appendChild(no);
+          row.appendChild(no);
           list.appendChild(row);
         });
       }
@@ -1945,7 +2014,7 @@
             liveFeed[info.room] = {
               id: info.room, title: info.title || "Live", host: info.host || "Host",
               cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
-              color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer",
+              color: "#7a4fd0", img: info.cover || "singer",
               multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
             };
           });
@@ -1957,7 +2026,7 @@
           liveFeed[info.room] = {
             id: info.room, title: info.title || "Live", host: info.host || "Host",
             cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
-            color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer",
+            color: "#7a4fd0", img: info.cover || "singer",
             multiGuest: info.multiGuest !== false, mode: info.mode || 'video'
           };
           renderHome();
@@ -2297,6 +2366,29 @@
           toast(d.muted ? "The host muted you." : "The host unmuted you.");
           renderGuestTiles();
         });
+        s.on("guest invite", function(d){ // v32: host ne invite bheji
+          if (!d || !room || room.isHost) return;
+          inviteSeat = d.seat || 0;
+          $("inviteText").textContent = (d.from || "The host") + " invited you to join as a guest" + (d.seat ? " (Seat " + d.seat + ")" : "");
+          $("invitePop").classList.add("open");
+        });
+        s.on("guest invite declined", function(d){
+          if (!d) return;
+          toast((d.name || "Guest") + " declined the invite.");
+        });
+        s.on("room admins", function(d){ // v32
+          if (!d) return;
+          roomAdmins = (d.admins || []).map(function(a){ return (a || "").toLowerCase(); });
+          renderWatcherList();
+        });
+        s.on("room cover", function(d){ // v32: host ne room DP badli
+          if (!d || !room || d.cover === undefined) return;
+          currentTheme = d.cover; applyRoomTheme(d.cover);
+        });
+        s.on("you were kicked", function(d){
+          toast(d && d.message ? d.message : "The host removed you from this live.");
+          if (room && d && d.room === currentRoomId) closeRoom();
+        });
         s.on("guest offer", function(d){
           if (!d || d.room !== currentRoomId) return;
           if (room && room.isHost) {
@@ -2360,7 +2452,7 @@
           $("roomView").classList.add("pk-mode");
           startPkTimer();
         }
-        setupRoomUI(r.title, r.host, r.color, r.followers, IMG[r.img], r.host + "'s live stream");
+        setupRoomUI(r.title, r.host, r.color, r.followers, coverSrc(r.img), r.host + "'s live stream");
         /* v13: asli live mein host ke asli followers + Follow haalat dikhayein. */
         if (r.id && r.id.indexOf("live-") === 0 && currentUser && window.location.protocol !== "file:") {
           fetch("/api/profile?name=" + encodeURIComponent(r.host) + "&viewer=" + encodeURIComponent(myName()))
@@ -2394,7 +2486,7 @@
         var badgeTxt = $("viewerLiveBadge").querySelector("span:last-child"); // v29: mode ka sahi naam
         if (badgeTxt) badgeTxt.textContent = "LIVE · " + (room.data && room.data.mode === 'audio' ? "Audio only" : room.data && room.data.mode === 'multi' ? "Multi-guest" : "Real video");
         $("themeBtn").style.display = (room.data && room.data.mode === 'video') ? "none" : ""; // v29: plain LIVE mein background nahi
-        hostMicMuted = false; var _hmb = $("hostMicBtn"); if (_hmb) _hmb.textContent = "Mic Off"; // v31
+        hostMicMuted = false; roomAdmins = []; // v32
         if (room.data && room.data.mode === 'audio') {
           setAvatar($("audioHostAv"), (room.data && room.data.hostAvatar) || (room.isHost && lastProfile ? lastProfile.avatar : ""), host.charAt(0));
           $("audioHostName").textContent = host;
@@ -2594,6 +2686,12 @@
       }
       function renderCovers(){
         var wrap = $("coverPick"); wrap.innerHTML = "";
+        var g = document.createElement("button"); // v32: gallery se room DP
+        g.type = "button"; g.className = "cover-pick" + ((chosenCover && chosenCover.indexOf("data:") === 0) ? " on" : "");
+        g.setAttribute("aria-label", "Cover from gallery");
+        g.innerHTML = '<span style="display:flex;align-items:center;justify-content:center;height:74px;font-size:.85rem;color:#fff;background:#2a2140">+ Gallery</span>';
+        g.addEventListener("click", function(){ galleryCoverMode = 'golive'; $("galleryCoverFile").click(); });
+        wrap.appendChild(g);
         Object.keys(IMG).forEach(function(k){
           var b = document.createElement("button");
           b.type = "button";
@@ -2759,6 +2857,11 @@
           b.addEventListener("click", function(){ setRoomTheme(k); });
           c.appendChild(b);
         });
+        var gb = document.createElement("button"); // v32: live mein gallery DP
+        gb.type = "button"; gb.className = "cover-pick";
+        gb.innerHTML = '<span style="display:flex;align-items:center;justify-content:center;height:74px;font-size:.85rem;color:#fff;background:#2a2140">+ Gallery</span>';
+        gb.addEventListener("click", function(){ galleryCoverMode = 'theme'; $("galleryCoverFile").click(); });
+        c.appendChild(gb);
       }
       function setRoomTheme(id){ // v26: host background badle — sab viewers ko dikhe
         if (!room || !room.isHost) return;
@@ -2774,13 +2877,35 @@
       $("pkAcceptBtn").addEventListener("click", function(){ if (socket && pkInviteFrom) socket.emit("pk accept", { fromRoom: pkInviteFrom }); $("pkInvite").classList.remove("show"); clearTimeout(pkInviteTimer); pkInviteFrom = null; }); // v28
       $("pkRejectBtn").addEventListener("click", function(){ if (socket && pkInviteFrom) socket.emit("pk reject", { fromRoom: pkInviteFrom }); $("pkInvite").classList.remove("show"); clearTimeout(pkInviteTimer); pkInviteFrom = null; }); // v28
       $("pkResultCloseBtn").addEventListener("click", function(){ $("pkResult").classList.remove("show"); }); // v28
-      $("hostMicBtn").addEventListener("click", function(){ // v31: host khud ko mute kare
-        var tr = localStream && localStream.getAudioTracks()[0];
-        if (!tr) { toast("Mic is not on."); return; }
-        hostMicMuted = !hostMicMuted;
-        tr.enabled = !hostMicMuted;
-        this.textContent = hostMicMuted ? "Mic On" : "Mic Off";
+      $("ppClose").addEventListener("click", function(){ closeUserProfile(); }); // v32
+      $("profilePop").addEventListener("click", function(ev){ if (ev.target === this) closeUserProfile(); });
+      $("invitePop").addEventListener("click", function(ev){ if (ev.target === this) $("invitePop").classList.remove("open"); });
+      $("inviteTrayX").addEventListener("click", function(){ $("inviteTray").classList.remove("open"); });
+      $("inviteAccept").addEventListener("click", function(){ // v32: invite accept — seat par beth jayein
+        $("invitePop").classList.remove("open");
+        if (socket && currentRoomId) socket.emit("guest invite accept", { room: currentRoomId, seat: inviteSeat });
       });
+      $("inviteDecline").addEventListener("click", function(){
+        $("invitePop").classList.remove("open");
+        if (socket && currentRoomId) socket.emit("guest invite decline", { room: currentRoomId });
+      });
+      $("galleryCoverFile").addEventListener("change", function(){ // v32: gallery se room DP
+        var f = this.files && this.files[0]; if (!f) return;
+        downscaleImageFile(f, 720, 0.75, function(url){
+          if (galleryCoverMode === 'theme') {
+            if (!room || !room.isHost) return;
+            currentTheme = url; applyRoomTheme(url); renderThemeGrid();
+            if (socket && myLiveRoomId) socket.emit("room cover", { room: myLiveRoomId, cover: url });
+            toast("Room DP updated for everyone.");
+          } else {
+            chosenCover = url; chosenTheme = url; renderCovers(); renderThemePick();
+            toast("Room DP picked from your gallery.");
+          }
+        });
+        this.value = "";
+      });
+      $("roomHostAvatar").addEventListener("click", function(){ openHostProfile(); }); // v32: host ki profile
+      $("audioHostAv").addEventListener("click", function(){ openHostProfile(); });
       $("themeBtn").addEventListener("click", function(){ renderThemeGrid(); $("themeTray").classList.toggle("open"); }); // v26
       $("themeTrayX").addEventListener("click", function(){ $("themeTray").classList.remove("open"); }); // v30: tray band karein
       $("musicTrayX").addEventListener("click", function(){ $("musicTray").classList.remove("open"); }); // v30
@@ -3115,7 +3240,9 @@
       $("userMenuCancelBtn").addEventListener("click", closeUserSheet);
       $("reportCancelBtn").addEventListener("click", closeUserSheet);
 
-      // Host ke live view mein watchers + Block button
+      // v32: Host ke live view mein watchers — sirf naam (Block button hata diya); tap par profile popup
+      var roomAdmins = []; // v32: is room ke admins (names, lowercase)
+      function isRoomAdminName(n){ return !!n && roomAdmins.some(function(a){ return (a || "").toLowerCase() === (n || "").toLowerCase(); }); }
       function renderWatcherList(){
         var list = $("watcherList"); if (!list) return;
         list.innerHTML = "";
@@ -3123,22 +3250,102 @@
         if (!ids.length) { list.innerHTML = '<div style="font-size:.8rem;opacity:.75">No viewers yet.</div>'; return; }
         ids.forEach(function(id){
           var name = watchers[id];
+          var seat = roomSeats.filter(function(x){ return x && x.guestId === id; })[0] || null;
           var row = document.createElement("div");
           row.className = "watcher-row";
           var nm = document.createElement("span");
-          nm.className = "wname"; nm.textContent = name + (roomSeats.some(function(x){ return x && x.guestId === id; }) ? " · Guest" : ""); // v20
-          var b = document.createElement("button");
-          b.type = "button"; b.className = "watcher-block"; b.textContent = "Block";
-          b.addEventListener("click", function(){
-            var s = connectSocket();
-            if (s && myLiveRoomId) s.emit("block user", { room: myLiveRoomId, target: name });
-            delete watchers[id];
-            renderWatcherList();
-            toast("Blocked " + name);
+          nm.className = "wname"; nm.textContent = name + (seat ? " · Guest" : "") + (isRoomAdminName(name) ? " · Admin" : "");
+          row.appendChild(nm);
+          row.addEventListener("click", function(){
+            openUserProfile({ name: name, watcherId: id, guestId: seat ? seat.guestId : null, seat: seat ? seat.seat : 0, avatar: seat ? seat.avatar : "", isAdmin: isRoomAdminName(name), isHost: room && room.data && room.data.host === name });
           });
-          row.appendChild(nm); row.appendChild(b);
           list.appendChild(row);
         });
+      }
+      // v32: Profile popup — Mute / Kick / Block / Make Admin (host), Mic (apni profile), Follow (viewer)
+      var ppTarget = null;
+      function openHostProfile(){
+        if (!room) return;
+        var hostName = room.data.host;
+        openUserProfile({ name: hostName, watcherId: null, guestId: null, seat: 0, avatar: (liveFeed[currentRoomId] && liveFeed[currentRoomId].hostAvatar) || "", isAdmin: false, isHost: true, isSelf: !!room.isHost });
+      }
+      function openUserProfile(t){
+        ppTarget = t;
+        var av = $("ppAvatar");
+        if (t.avatar) av.innerHTML = '<img src="' + t.avatar + '" alt="" />';
+        else { av.innerHTML = ""; av.textContent = (t.name || "?").charAt(0); }
+        $("ppName").textContent = t.name || "";
+        $("ppTag").textContent = t.isSelf ? "You" : (t.isHost ? "Host" : (t.isAdmin ? "Admin" : (t.seat ? "Guest · Seat " + t.seat : "Viewer")));
+        var box = $("ppButtons"); box.innerHTML = "";
+        function addBtn(label, cls, fn){
+          var b = document.createElement("button");
+          b.type = "button"; b.className = "pp-btn" + (cls ? " " + cls : ""); b.textContent = label;
+          b.addEventListener("click", function(){ fn(); });
+          box.appendChild(b);
+        }
+        if (t.isSelf && room && room.isHost) { // host apni profile — mic on/off yahin (neeche se hata diya)
+          addBtn(hostMicMuted ? "Mic On" : "Mic Off", "", function(){
+            toggleHostMic();
+            closeUserProfile();
+            toast(hostMicMuted ? "Your mic is off." : "Your mic is on.");
+          });
+        } else if (room && (room.isHost || isRoomAdminName(myName()))) { // host ya admin — manage kare
+          if (t.seat) { // seated guest — mute
+            var seat = roomSeats.filter(function(x){ return x && x.seat === t.seat; })[0];
+            var hm = seat ? !!seat.hostMuted : false;
+            addBtn(hm ? "Unmute guest" : "Mute guest", "", function(){
+              if (socket && currentRoomId) socket.emit("guest mute", { room: currentRoomId, guestId: t.guestId, muted: !hm });
+              closeUserProfile();
+            });
+          }
+          addBtn("Kick", "", function(){ // simple kick — seat se ya room se nikaale
+            if (t.guestId && socket && currentRoomId) socket.emit("guest kick", { room: currentRoomId, guestId: t.guestId });
+            else if (socket && currentRoomId) socket.emit("kick viewer", { room: currentRoomId, target: t.name });
+            closeUserProfile(); toast("Kicked " + t.name);
+          });
+          if (room.isHost) { // Block + Admin sirf host kar sakta hai
+            addBtn("Block", "danger", function(){
+              if (socket && myLiveRoomId) socket.emit("block user", { room: myLiveRoomId, target: t.name });
+              closeUserProfile(); toast("Blocked " + t.name);
+            });
+            addBtn(t.isAdmin ? "Remove Admin" : "Make Admin", "gold", function(){
+              if (socket && myLiveRoomId) socket.emit(t.isAdmin ? "remove admin" : "make admin", { room: myLiveRoomId, target: t.name });
+              closeUserProfile(); toast(t.isAdmin ? (t.name + " is no longer an admin.") : (t.name + " is now an admin."));
+            });
+          }
+        } else { // viewer — profile dekhe + follow kare
+          addBtn("Follow", "", function(){
+            fetch("/api/follow", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), to: t.name }) })
+              .then(function(r){ return r.json(); }).then(function(d){ if (d && d.ok) { toast("Following " + t.name); closeUserProfile(); } });
+          });
+        }
+        if (!t.avatar && t.name) { // profile photo load karein (agar ho)
+          fetch("/api/profile?name=" + encodeURIComponent(t.name)).then(function(r){ return r.json(); }).then(function(d){
+            if (d && d.ok && d.avatar && ppTarget === t) { var a2 = $("ppAvatar"); a2.innerHTML = '<img src="' + d.avatar + '" alt="" />'; }
+          }).catch(function(){});
+        }
+        $("profilePop").classList.add("open");
+      }
+      function closeUserProfile(){ $("profilePop").classList.remove("open"); ppTarget = null; }
+      // v32: Invite picker — host khaali seat par tap kare to viewer chune
+      var inviteSeat = 0;
+      function openInvitePicker(seat){
+        inviteSeat = seat;
+        var list = $("inviteList"); list.innerHTML = "";
+        var ids = Object.keys(watchers).filter(function(id){ return !roomSeats.some(function(x){ return x && x.guestId === id; }); });
+        if (!ids.length) { list.innerHTML = '<div style="font-size:.85rem;opacity:.8">No viewers to invite yet.</div>'; }
+        ids.forEach(function(id){
+          var row = document.createElement("div"); row.className = "watcher-row";
+          var nm = document.createElement("span"); nm.className = "wname"; nm.textContent = watchers[id];
+          var b = document.createElement("button"); b.type = "button"; b.className = "watcher-block"; b.textContent = "Invite";
+          b.addEventListener("click", function(){
+            if (socket && myLiveRoomId) socket.emit("guest invite", { room: myLiveRoomId, to: id, seat: inviteSeat });
+            $("inviteTray").classList.remove("open");
+            toast("Invite sent to " + watchers[id]);
+          });
+          row.appendChild(nm); row.appendChild(b); list.appendChild(row);
+        });
+        $("inviteTray").classList.add("open");
       }
 
       // Blocked users screen
