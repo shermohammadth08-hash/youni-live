@@ -1117,10 +1117,18 @@ io.on("connection", (sock) => {
     if (isKickedFromRoom(roomId, name)) { sock.emit("guest request failed", { room: roomId, reason: "kicked" }); return; } // v34
     if (seatsFor(roomId).some((x) => x && x.guestId === sock.id)) return; // pehle se guest hai
     if (seatsFor(roomId).every(Boolean)) { sock.emit("guest request failed", { room: roomId, reason: "full" }); return; }
-    const seatsNow = seatsFor(roomId); // v35: guest ne konsi seat maangi (khaali ho to)
+    const seatsNow = seatsFor(roomId);
     const wantSeat = parseInt(data.seat, 10);
-    const reqSeat = (wantSeat >= 1 && wantSeat <= seatsNow.length && !seatsNow[wantSeat - 1]) ? wantSeat : 0;
-    io.to(live.hostId).emit("guest request", { room: roomId, guestId: sock.id, name: name, seat: reqSeat });
+    if (wantSeat >= 1 && wantSeat <= seatsNow.length) { // v36: seat par tap — khud-ba-khud seat (host ki approve nahi)
+      if (seatsNow[wantSeat - 1]) { sock.emit("guest request failed", { room: roomId, reason: "taken" }); return; }
+      guestSeq[roomId] = (guestSeq[roomId] || 0) + 1;
+      seatsNow[wantSeat - 1] = { seat: wantSeat, guestId: sock.id, name: name, seq: guestSeq[roomId] };
+      io.to(sock.id).emit("guest approved", { room: roomId, seat: wantSeat, hostId: live.hostId });
+      broadcastSeats(roomId);
+      emitChatToRoom(roomId, { room: roomId, name: "System", text: name + " sat on seat " + wantSeat });
+      return;
+    }
+    io.to(live.hostId).emit("guest request", { room: roomId, guestId: sock.id, name: name, seat: 0 }); // button se request — host approve kare
   });
 
   sock.on("guest approve", (data) => {
@@ -1161,6 +1169,7 @@ io.on("connection", (sock) => {
     const roomId = typeof data.room === "string" ? data.room : "";
     const guestId = typeof data.guestId === "string" ? data.guestId : "";
     if (!isHostOf(sock.id, roomId) && !isRoomAdmin(sock, roomId)) return; // v32: admin bhi kick kar sakta hai
+    if (guestId === sock.id) return; // v36: khud ko kick nahi
     const seat = seatsFor(roomId).find((x) => x && x.guestId === guestId);
     if (freeGuestSeat(roomId, guestId)) { if (seat) kickFromRoom(roomId, seat.name); io.to(guestId).emit("guest removed", { room: roomId }); } // v34: kick = is live mein dobara nahi
   });
@@ -1173,6 +1182,7 @@ io.on("connection", (sock) => {
     if (!roomId || !target || !liveRooms[roomId]) return;
     if (!isHostOf(sock.id, roomId) && !isRoomAdmin(sock, roomId)) return;
     if (liveRooms[roomId].host.toLowerCase() === target.toLowerCase()) return; // host ko kick nahi
+    if ((sock.data.userName || "").toLowerCase() === target.toLowerCase()) return; // v36: khud ko kick nahi
     kickFromRoom(roomId, target); // v34: is live mein dobara nahi aa sakta
     for (const [, x] of io.sockets.sockets) {
       const sName = (x.data && x.data.userName) || "";
@@ -1253,6 +1263,7 @@ io.on("connection", (sock) => {
     if (!data || typeof data !== "object") return;
     const guestId = typeof data.guestId === "string" ? data.guestId : "";
     if (!joinedRoom || (!isHostOf(sock.id, joinedRoom) && !isRoomAdmin(sock, joinedRoom)) || !guestId) return; // v32: admin bhi mute kar sakta hai
+    if (guestId === sock.id) return; // v36: khud ko host-mute nahi (self-mute alag hai)
     const seat = seatsFor(joinedRoom).find((x) => x && x.guestId === guestId);
     if (!seat) return;
     seat.hostMuted = !!data.muted;

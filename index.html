@@ -1609,11 +1609,11 @@
         var q = videoQuality();
         if (q === "high") { video.width = { ideal: 1280 }; video.height = { ideal: 720 }; }
         else if (q === "medium") { video.width = { ideal: 640 }; video.height = { ideal: 480 }; }
-        return navigator.mediaDevices.getUserMedia({ video: video, audio: true });
+        return navigator.mediaDevices.getUserMedia({ video: video, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); // v36: echo khatam
       }
       function startMic(){ // v23: Audio LIVE — sirf mic, camera nahi
         if (!camAvailable()) return Promise.reject(new Error("nocam"));
-        return navigator.mediaDevices.getUserMedia({ audio: true });
+        return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); // v36: echo khatam — do phone paas hon to awaz ghumti hai
       }
       function stopCamera(){
         if (localStream) { localStream.getTracks().forEach(function(t){ t.stop(); }); localStream = null; }
@@ -1953,7 +1953,7 @@
           if (stream && vid.srcObject !== stream) { vid.srcObject = stream; vid.play().catch(function(){}); }
           else if (stream) { vid.play().catch(function(){}); }
           else if (!stream && vid.srcObject) { vid.srcObject = null; }
-          tile.onclick = function(){ openUserProfile({ name: seat.name, guestId: seat.guestId, seat: seat.seat, avatar: seat.avatar || "", isAdmin: isRoomAdminName(seat.name), isHost: false }); }; // v32: tile par tap — profile popup (kick ab profile mein hai)
+          tile.onclick = function(){ openUserProfile({ name: seat.name, guestId: seat.guestId, seat: seat.seat, avatar: seat.avatar || "", isAdmin: isRoomAdminName(seat.name), isHost: false, isSelf: seat.name === myName() }); }; // v32: tile par tap — profile popup (kick ab profile mein hai) — v36: apni seat ho to isSelf
         }
         syncGuestAudio(); // v35: audio room mein guest ki awaz
       }
@@ -1973,7 +1973,7 @@
         guestRequested = true;
         renderGuestBtn();
         s.emit("guest request", { room: currentRoomId, name: myName(), seat: seat || 0 });
-        toast(seat ? ("Seat " + seat + " requested — waiting for host.") : "Guest request sent to host.");
+        toast(seat ? ("Joining seat " + seat + "...") : "Guest request sent to host."); // v36: seat par tap — seedha seat, host ki approve nahi
       }
       function leaveGuest(){
         var s = connectSocket();
@@ -2387,7 +2387,7 @@
         s.on("guest request failed", function(d){
           guestRequested = false;
           renderGuestBtn();
-          toast(d && d.reason === "full" ? "All guest seats are full." : d && d.reason === "off" ? "Multi-guest is off for this live." : d && d.reason === "kicked" ? "You were kicked from this live." : "Could not join as guest.");
+          toast(d && d.reason === "full" ? "All guest seats are full." : d && d.reason === "off" ? "Multi-guest is off for this live." : d && d.reason === "kicked" ? "You were kicked from this live." : d && d.reason === "taken" ? "Seat is taken — try another seat." : "Could not join as guest."); // v36: taken
         });
         s.on("guest removed", function(d){
           if (!d || d.room !== currentRoomId) return;
@@ -3307,7 +3307,7 @@
           nm.className = "wname"; nm.textContent = name + (seat ? " · Guest" : "") + (isRoomAdminName(name) ? " · Admin" : "");
           row.appendChild(nm);
           row.addEventListener("click", function(){
-            openUserProfile({ name: name, watcherId: id, guestId: seat ? seat.guestId : null, seat: seat ? seat.seat : 0, avatar: seat ? seat.avatar : "", isAdmin: isRoomAdminName(name), isHost: room && room.data && room.data.host === name });
+            openUserProfile({ name: name, watcherId: id, guestId: seat ? seat.guestId : null, seat: seat ? seat.seat : 0, avatar: seat ? seat.avatar : "", isAdmin: isRoomAdminName(name), isHost: room && room.data && room.data.host === name, isSelf: name === myName() }); // v36: apni row ho to isSelf
           });
           list.appendChild(row);
         });
@@ -3357,6 +3357,9 @@
         } else if (t.isSelf) { // apni profile (viewer) — koi action nahi
           manageBtn.style.display = "none";
         } else if (room && (room.isHost || isRoomAdminName(myName()))) { // host ya admin — manage kare
+          if (t.isHost) { // v36: host par koi action nahi — admin host ko kick/mute nahi kar sakta
+            manageBtn.style.display = "none";
+          } else {
           hasActions = true;
           manageBtn.style.display = "";
           if (t.seat) { // seated guest — mute
@@ -3382,6 +3385,7 @@
               closeUserProfile(); toast(t.isAdmin ? (t.name + " is no longer an admin.") : (t.name + " is now an admin."));
             });
           }
+          } // v36: else (host target nahi) band
         } else { // viewer — profile dekhe + follow/report kare
           hasActions = true;
           manageBtn.style.display = "";
