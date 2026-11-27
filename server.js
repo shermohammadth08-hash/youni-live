@@ -58,6 +58,8 @@ const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
 // Diamond 200, Crown 500, Sports Car 1500, Rocket 3000, Palace 5000, Yacht 9999).
 const GIFTS = { rose: 10, heart: 50, gem: 200, crown: 500, car: 1500, rocket: 3000, castle: 5000, yacht: 9999 };
 const DAILY_COINS = 500;
+const BOOST_COST = 100; // v57: Boost my room — 100 coins = 10 minute
+const BOOST_DURATION = 10 * 60 * 1000; // v57: Boost 10 minute chalta hai
 const WELCOME_COINS = 1000;
 // v12: gift tokens — /api/gift kamyab ho to ek token banta hai; socket "gift"
 // handler sirf token dekh kar broadcast karta hai (bina payment ke nakli gift nahi).
@@ -881,13 +883,15 @@ function liveListFor(viewerName){
     .filter((rid) => !roomHiddenFor(viewerName, liveRooms[rid].host))
     .map((rid) => {
       const base = Object.assign({ room: rid, hostAvatar: avatarFor(liveRooms[rid].host), hostIdNum: idForUser(liveRooms[rid].host), hostLevel: levelForUser(liveRooms[rid].host), viewers: roomViewerCount(rid) }, liveRooms[rid]); // v29: asli viewer count
+      base.boosted = (liveRooms[rid].boostedUntil || 0) > Date.now(); // v57: Boost — Home feed mein ooper
       const pk = pkForRoom(rid); // v28: PK chal rahi ho to late joiner ko bhi pata chale
       if (pk) {
         const isA = pk.roomA === rid;
         base.pk = { id: pk.id, roomA: pk.roomA, roomB: pk.roomB, nameA: pk.nameA, nameB: pk.nameB, opponentRoom: isA ? pk.roomB : pk.roomA, opponentName: isA ? pk.nameB : pk.nameA, endsAt: pk.endsAt, scoreA: pk.scoreA, scoreB: pk.scoreB };
       }
       return base;
-    });
+    })
+    .sort((a, b) => (b.boosted ? 1 : 0) - (a.boosted ? 1 : 0)); // v57: Boosted room pehle (stable sort — baaki ka order waisa hi)
 }
 
 function emitChatToRoom(roomId, msg){
@@ -1067,7 +1071,7 @@ io.on("connection", (sock) => {
     const cat = typeof data.cat === "string" ? data.cat.slice(0, 20) : "Chat";
     const rawCover = typeof data.cover === "string" ? data.cover : "singer"; // v32: gallery DP (data URL) ya built-in cover
     const cover = (rawCover.startsWith("data:image/") && rawCover.length <= 200000) ? rawCover : (rawCover.length <= 30 ? rawCover : "singer");
-    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, theme: (typeof data.theme === "string" && data.theme.length <= 20) ? data.theme.slice(0, 20) : cover, multiGuest: data.multiGuest !== false, mode: typeof data.mode === "string" ? data.mode.slice(0, 10) : "video", tag: "", cameraOn: true, roomExp: 0, roomLevel: 1 }; // v23, v26 theme; v55: Room Level Lv.1 se shuru
+    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, theme: (typeof data.theme === "string" && data.theme.length <= 20) ? data.theme.slice(0, 20) : cover, multiGuest: data.multiGuest !== false, mode: typeof data.mode === "string" ? data.mode.slice(0, 10) : "video", tag: "", cameraOn: true, roomExp: 0, roomLevel: 1, boostedUntil: 0 }; // v23, v26 theme; v55: Room Level Lv.1 se shuru; v57: Boost
     if (!sock.data.userName) sock.data.userName = host;
     emitLiveStarted(Object.assign({ room: roomId, hostAvatar: avatarFor(host) }, liveRooms[roomId])); // v34: guest ko host ki photo dikhe
   });
@@ -1108,6 +1112,29 @@ io.on("connection", (sock) => {
     liveRooms[roomId].tag = tag;
     io.to(roomId).emit("room tag", { room: roomId, tag: tag });
     broadcastLiveList();
+  });
+  sock.on("boost room", (data) => { // v57: host room boost kare — 100 coins = 10 minute, Home feed mein sab se ooper
+    if (!data || typeof data !== "object") return;
+    const roomId = typeof data.room === "string" ? data.room : "";
+    if (!isHostOf(sock.id, roomId) || !liveRooms[roomId]) return;
+    const hostName = liveRooms[roomId].host;
+    const users = loadUsers();
+    const hostKey = findUserKey(users, hostName);
+    if (!hostKey) { sock.emit("boost failed", { room: roomId, error: "Please sign up first." }); return; }
+    normalizeUser(users[hostKey], users);
+    if (users[hostKey].coins < BOOST_COST) {
+      sock.emit("boost failed", { room: roomId, error: "Not enough coins — you need 100 coins. Get 500 free coins daily from Profile.", coins: users[hostKey].coins });
+      return;
+    }
+    users[hostKey].coins -= BOOST_COST;
+    if (!saveUsers(users)) { sock.emit("boost failed", { room: roomId, error: "Coins could not be saved — please try again." }); return; }
+    const room = liveRooms[roomId];
+    room.boostedUntil = Math.max(room.boostedUntil || 0, Date.now()) + BOOST_DURATION; // pehle se Boost hai to 10 minute aur barh jayenge
+    io.to(roomId).emit("room boost", { room: roomId, boostedUntil: room.boostedUntil });
+    sock.emit("boost ok", { room: roomId, boostedUntil: room.boostedUntil, coins: users[hostKey].coins });
+    emitChatToRoom(roomId, { name: "System", text: "\u26a1 Room boosted — top of the Home feed for 10 minutes!" });
+    broadcastLiveList();
+    setTimeout(() => { if (liveRooms[roomId] && (liveRooms[roomId].boostedUntil || 0) <= Date.now()) broadcastLiveList(); }, BOOST_DURATION + 1000); // v57: Boost khatam ho to feed update
   });
   sock.on("room announcement", (data) => { // v53: host ka elaan — room ki chat mein sab ko System line
     if (!data || typeof data !== "object") return;

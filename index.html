@@ -678,6 +678,8 @@
       .rih-title { font-weight: 700; font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; }
       .rih-id { font-size: .72rem; opacity: .85; }
       .rih-tag { display: inline-block; background: rgba(122,79,208,.92); color: #fff; font-size: .66rem; font-weight: 700; border-radius: 999px; padding: .1rem .45rem; margin-top: .15rem; width: fit-content; max-width: 11rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* v56: room tag header mein dikhe */
+      .boost-pill { display: inline-block; background: linear-gradient(90deg,#ffb020,#ff7a1a); color: #fff; font-size: .66rem; font-weight: 800; border-radius: 999px; padding: .18rem .5rem; margin-left: .4rem; vertical-align: middle; letter-spacing: .02em; white-space: nowrap; } /* v57: BOOSTED badge (Home card) */
+      .rit-boost.boosted { background: linear-gradient(90deg,#22c55e,#16a34a); } /* v57: Boost chal raha hai to button hara */
       .rih-bolt { margin-left: auto; background: linear-gradient(135deg,#ffb020,#ff7a1a); color: #fff; border-radius: 50%; width: 1.9rem; height: 1.9rem; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
       #roomInfoTray { background: #fff; color: #1a1a1a; max-height: 78dvh; }
       #roomInfoTray .rit-top { display: flex; gap: .8rem; align-items: flex-start; margin: .4rem 0 .9rem; }
@@ -1443,7 +1445,7 @@
             '<span class="live-badge">LIVE</span>' +
             '<span class="viewers">' + eyeSVG() + fmt(r.viewers) + '</span>' +
             '<span class="shade"></span>' +
-            '<span class="meta"><p class="t">' + r.title + '</p><p class="h">' + r.host + ' · ' + r.cat + (r.mode === 'audio' ? ' · Audio' : r.mode === 'multi' ? ' · Multi-guest' : '') + '</p></span>';
+            '<span class="meta"><p class="t">' + r.title + (r.boosted ? '<span class="boost-pill">\u26a1 BOOSTED</span>' : '') + '</p><p class="h">' + r.host + ' · ' + r.cat + (r.mode === 'audio' ? ' · Audio' : r.mode === 'multi' ? ' · Multi-guest' : '') + '</p></span>';
         } else {
           el.innerHTML =
             '<span class="thumb"><img src="' + coverSrc(r.img) + '" alt="' + r.host + '\'s live room" loading="lazy" />' +
@@ -1451,7 +1453,7 @@
             '<span class="viewers">' + eyeSVG() + fmt(r.viewers) + '</span></span>' +
             '<span class="info"><p class="title">' + r.title + '</p>' +
             '<span class="host-row"><span class="avatar" style="background:' + r.color + '">' + (r.hostAvatar ? '<img src="' + r.hostAvatar + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%" />' : r.host.charAt(0)) + '</span>' +
-            '<span class="name">' + r.host + '</span><span class="cat-tag">' + r.cat + '</span>' + (r.mode === 'audio' ? '<span class="cat-tag">Audio</span>' : r.mode === 'multi' ? '<span class="cat-tag">Multi-guest</span>' : '') + '</span></span>';
+            '<span class="name">' + r.host + '</span><span class="cat-tag">' + r.cat + '</span>' + (r.mode === 'audio' ? '<span class="cat-tag">Audio</span>' : r.mode === 'multi' ? '<span class="cat-tag">Multi-guest</span>' : '') + (r.boosted ? '<span class="boost-pill">\u26a1 BOOSTED</span>' : '') + '</span></span>';
         }
         el.addEventListener("click", function(){ openRoom(r); });
         return el;
@@ -1460,7 +1462,7 @@
       function renderHome(){
         var liveList = Object.keys(liveFeed).map(function(k){ return liveFeed[k]; })
           .filter(function(r){ return (homeMode === "all" || r.mode === homeMode) && (currentCat === "All" || r.cat === currentCat); });
-        var list = liveList; // v19: REAL rooms only — demo rooms hata diye
+        var list = liveList.sort(function(a, b){ return (b.boosted ? 1 : 0) - (a.boosted ? 1 : 0); }); // v19: REAL rooms only — demo rooms hata diye; v57: Boosted room sab se ooper (stable sort)
         var fw = $("featWrap"); fw.innerHTML = "";
         var grid = $("roomGrid"); grid.innerHTML = "";
         if (list.length) {
@@ -2205,7 +2207,7 @@
               cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
               color: "#7a4fd0", img: info.cover || "singer", hostAvatar: info.hostAvatar || "",
               multiGuest: info.multiGuest !== false, mode: info.mode || 'video',
-              theme: info.theme || "", cover: info.cover || "singer", hostIdNum: info.hostIdNum || "", hostLevel: info.hostLevel || 1, tag: info.tag || "", roomLevel: info.roomLevel || 1, roomExp: info.roomExp || 0 // v55: Room Level + EXP // v53: room header + info sheet
+              theme: info.theme || "", cover: info.cover || "singer", hostIdNum: info.hostIdNum || "", hostLevel: info.hostLevel || 1, tag: info.tag || "", roomLevel: info.roomLevel || 1, roomExp: info.roomExp || 0, boosted: info.boosted || false, boostedUntil: info.boostedUntil || 0 // v55: Room Level + EXP // v53: room header + info sheet; v57: Boost
             };
           });
           Object.keys(liveFeed).forEach(function(k){ if (!keep[k]) delete liveFeed[k]; });
@@ -2219,7 +2221,7 @@
             cat: info.cat || "Chat", viewers: info.viewers || 0, likes: 0, followers: 0,
             color: "#7a4fd0", img: info.cover || "singer", hostAvatar: info.hostAvatar || "",
             multiGuest: info.multiGuest !== false, mode: info.mode || 'video',
-            theme: info.theme || "", cover: info.cover || "singer", roomLevel: info.roomLevel || 1, roomExp: info.roomExp || 0 // v37: host ka background guest ko bhi dikhe; v55: Room Level + EXP
+            theme: info.theme || "", cover: info.cover || "singer", roomLevel: info.roomLevel || 1, roomExp: info.roomExp || 0, boosted: info.boosted || false, boostedUntil: info.boostedUntil || 0 // v37: host ka background guest ko bhi dikhe; v55: Room Level + EXP; v57: Boost
           };
           renderHome();
           if (room && room.isHost && info.room === myLiveRoomId && !liveConfirmed) { liveConfirmed = true; if (liveConfirmTimer) { clearTimeout(liveConfirmTimer); liveConfirmTimer = null; } toast("Congrats! You're live"); }
@@ -2572,6 +2574,20 @@
           if (room.data) room.data.tag = d.tag;
           $("ritTagVal").textContent = d.tag || "No tag";
           setRoomTag(d.tag); // v56: header mein bhi tag dikhe
+        });
+        s.on("room boost", function(d){ // v57: host ne room boost kiya (room mein sab ko)
+          if (!d || !room || d.room !== (myLiveRoomId || currentRoomId)) return;
+          if (room.data) room.data.boostedUntil = d.boostedUntil;
+          updateBoostBtn();
+        });
+        s.on("boost ok", function(d){ // v57: boost kamyab (host ko)
+          if (!d) return;
+          toast("\u26a1 Room boosted for 10 minutes! (" + d.coins + " coins left)");
+          if (room && room.data) room.data.boostedUntil = d.boostedUntil;
+          updateBoostBtn();
+        });
+        s.on("boost failed", function(d){ // v57: boost nahi hua (coins kam hon to)
+          toast((d && d.error) || "Boost failed.");
         });
         s.on("room level", function(d){ // v55: Room level up hua — sheet mein level update karein
           if (!d || !room || d.roomLevel === undefined) return;
@@ -2955,7 +2971,7 @@
           var liveRoomId = "live-" + myName().toLowerCase().replace(/[^a-z0-9]/g, "");
           myLiveRoomId = liveRoomId;
           room = {
-            data: { title: title, host: myName(), cat: cat, mode: liveMode, multiGuest: liveMode !== 'video', hostAvatar: lastProfile ? lastProfile.avatar : "", theme: chosenTheme, roomLevel: 1, roomExp: 0 }, // v26; v55: Room Level Lv.1 se shuru
+            data: { title: title, host: myName(), cat: cat, mode: liveMode, multiGuest: liveMode !== 'video', hostAvatar: lastProfile ? lastProfile.avatar : "", theme: chosenTheme, roomLevel: 1, roomExp: 0, boostedUntil: 0 }, // v26; v55: Room Level Lv.1 se shuru; v57: Boost
             isHost: true, viewers: 0, likes: 0, following: true,
             gifts: 0, giftValue: 0, elapsed: 0
           };
@@ -3125,6 +3141,18 @@
         var roomExp = (d.roomExp) || 0;
         return { title: d.title || "Live", host: d.host || "Host", cover: d.cover || d.theme || "singer", tag: d.tag || "", idNum: hostIdNum, level: roomLevel, roomExp: roomExp };
       }
+      function updateBoostBtn(){ // v57: Boost button ki halat dikhayein (chal raha hai to hara + waqt)
+        var b = $("ritBoostBtn"); if (!b) return;
+        var until = room && room.data && room.data.boostedUntil;
+        if (until && until > Date.now()) {
+          var mins = Math.max(1, Math.ceil((until - Date.now()) / 60000));
+          b.textContent = "\u26a1 Boosted \u00b7 " + mins + " min left";
+          b.classList.add("boosted");
+        } else {
+          b.textContent = "Boost my room";
+          b.classList.remove("boosted");
+        }
+      }
       function setRoomTag(tag){ // v56: room tag header mein dikhayein (khaali ho to chhupayein)
         var _rt = $("rihTag"); if (!_rt) return;
         if (tag) { _rt.textContent = tag; _rt.style.display = "inline-block"; }
@@ -3140,6 +3168,7 @@
         var info = roomInfoData(); if (!info) return;
         setRoomInfoDp();
         setRoomTag(info.tag); // v56: header mein bhi tag dikhe (sheet khulte hi)
+        updateBoostBtn(); // v57: Boost button ki halat dikhe
         $("rihTitle").textContent = info.title;
         $("rihId").textContent = "ID: " + (info.idNum || info.host);
         $("ritTitle").textContent = info.title;
@@ -3213,8 +3242,15 @@
         toast("Announcement posted.");
         $("roomInfoTray").classList.remove("open"); // v56: sheet band karein taake host ko chat mein 📢 elaan dikhe
       });
-      $("ritBoostBtn").addEventListener("click", function(){
-        toast("Boost jald aayega — iske liye payment system chahiye.");
+      $("ritBoostBtn").addEventListener("click", function(){ // v57: ASLI Boost — 100 coins = 10 minute
+        if (!room || !room.isHost) { toast("Only the host can boost this room."); return; }
+        var already = room.data && room.data.boostedUntil && room.data.boostedUntil > Date.now();
+        var msg = already
+          ? "Your room is already boosted. Extend for 10 more minutes? Cost: 100 coins."
+          : "Boost your room for 10 minutes? Your room goes to the TOP of the Home feed with a \u26a1 BOOSTED badge. Cost: 100 coins.";
+        if (!confirm(msg)) return;
+        var s = connectSocket();
+        if (s) s.emit("boost room", { room: myLiveRoomId || currentRoomId });
       });
       $("viewerEyeBtn").addEventListener("click", openViewersTray); // v50: asli <button>, click par tray khule
       $("viewerEyeBtn").addEventListener("touchstart", function(e){ e.preventDefault(); openViewersTray(); }, {passive:false}); // v50: mobile touch par bhi tray khule
