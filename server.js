@@ -52,6 +52,7 @@ const KEY_FILE = path.join(__dirname, "key.pem");
 // Dono files DATA_DIR mein rehti hain (Railway: /data volume) aur
 // pehli dafa use hone par banti hain — users.json jaisa hi tareeqa.
 const BLOCKS_FILE = path.join(DATA_DIR, "blocks.json");
+const AVATAR_DIR = path.join(DATA_DIR, "avatars"); // v24: profile photos
 const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
 // v12: Gifts — client ke GIFT_DEFS se rate milne chahiye (Rose 10, Heart 50,
 // Diamond 200, Crown 500, Sports Car 1500, Rocket 3000, Palace 5000, Yacht 9999).
@@ -257,7 +258,7 @@ function readBody(req) {
     let data = "";
     req.on("data", (chunk) => {
       data += chunk;
-      if (data.length > 10000) {
+      if (data.length > 300000) { // v24: avatar photo bhi isi se aati hai
         req.destroy();
         reject(new Error("Body too big"));
       }
@@ -273,6 +274,40 @@ function readBody(req) {
   });
 }
 
+// v24: Profile photo upload — client 256px JPEG bhejta hai, file /data/avatars mein.
+function handleAvatar(data, res) {
+  const name = cleanName(data.name);
+  if (!name) return sendJSON(res, 400, { ok: false, error: "Please enter a name." });
+  const image = typeof data.image === "string" ? data.image : "";
+  const m = image.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) return sendJSON(res, 400, { ok: false, error: "Please choose a photo." });
+  const buf = Buffer.from(m[2], "base64");
+  if (buf.length > 200 * 1024) return sendJSON(res, 400, { ok: false, error: "Photo is too big." });
+  const users = loadUsers();
+  const key = findUserKey(users, name);
+  if (!key) return sendJSON(res, 400, { ok: false, error: "No account with this name — please sign up first." });
+  const safe = key.toLowerCase().replace(/[^a-z0-9]/g, "") || "user";
+  const ext = m[1] === "png" ? "png" : "jpg";
+  try {
+    fs.mkdirSync(AVATAR_DIR, { recursive: true });
+    fs.writeFileSync(path.join(AVATAR_DIR, safe + "." + ext), buf);
+    const other = ext === "jpg" ? "png" : "jpg";
+    try { fs.unlinkSync(path.join(AVATAR_DIR, safe + "." + other)); } catch (e) {}
+  } catch (e) { return sendJSON(res, 500, { ok: false, error: "Could not save the photo." }); }
+  users[key].avatar = "/avatars/" + safe + "." + ext;
+  saveUsers(users);
+  sendJSON(res, 200, { ok: true, avatar: users[key].avatar });
+}
+function handleGetAvatar(req, res) {
+  const file = req.url.slice("/avatars/".length).split("?")[0];
+  if (!/^[a-z0-9_-]+\.(jpg|png)$/.test(file)) { res.writeHead(404); res.end("Not found"); return; }
+  const full = path.join(AVATAR_DIR, file);
+  fs.readFile(full, (err, data) => {
+    if (err) { res.writeHead(404); res.end("Not found"); return; }
+    res.writeHead(200, { "Content-Type": file.endsWith(".png") ? "image/png" : "image/jpeg", "Cache-Control": "public, max-age=86400" });
+    res.end(data);
+  });
+}
 function handleRegister(data, res) {
   const name = typeof data.name === "string" ? data.name.trim() : "";
   const password = typeof data.password === "string" ? data.password : "";
@@ -464,7 +499,7 @@ function handleGetProfile(req, res) {
   const online = isSelf ? true : (u.hideOnline ? null : (lastSeenMin !== null && lastSeenMin < 3));
   const lastActiveMin = isSelf ? (lastSeenMin === null ? 0 : lastSeenMin) : (u.hideOnline || u.hideActive ? null : lastSeenMin);
   sendJSON(res, 200, {
-    ok: true, name: key, id: u.id,
+    ok: true, name: key, id: u.id, avatar: u.avatar || "",
     followers: followers.length, following: following.length,
     followersList: hidden ? [] : followers.slice(0, 200),
     followingList: hidden ? [] : following.slice(0, 200),
@@ -567,7 +602,7 @@ function handleGetRanking(req, res) {
     const u = users[k];
     if (normalizeUser(u, users)) changed = true; // v18: purane account ko bhi apni ID mile
     if (typeof u.xp !== "number") u.xp = 0;
-    return { name: k, id: u.id, xp: u.xp || 0, level: levelFor(u.xp), followers: Array.isArray(u.followers) ? u.followers.length : 0 };
+    return { name: k, id: u.id, xp: u.xp || 0, level: levelFor(u.xp), followers: Array.isArray(u.followers) ? u.followers.length : 0, avatar: u.avatar || "" };
   });
   if (changed) saveUsers(users);
   arr.sort((a, b) => b.xp - a.xp);
@@ -605,7 +640,7 @@ function handleHeartbeat(data, res) {
 function handleRequest(req, res) {
   const url = req.url.split("?")[0];
 
-  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift" || url === "/api/follow" || url === "/api/unfollow" || url === "/api/location" || url === "/api/live-ended" || url === "/api/privacy" || url === "/api/change-password" || url === "/api/heartbeat")) {
+  if (req.method === "POST" && (url === "/api/register" || url === "/api/login" || url === "/api/block" || url === "/api/unblock" || url === "/api/report" || url === "/api/coins/claim" || url === "/api/gift" || url === "/api/follow" || url === "/api/unfollow" || url === "/api/location" || url === "/api/live-ended" || url === "/api/privacy" || url === "/api/change-password" || url === "/api/heartbeat" || url === "/api/avatar")) {
     readBody(req).then((data) => {
       if (url === "/api/register") handleRegister(data, res);
       else if (url === "/api/login") handleLogin(data, res);
@@ -620,12 +655,14 @@ function handleRequest(req, res) {
       else if (url === "/api/privacy") handlePrivacy(data, res);
       else if (url === "/api/change-password") handleChangePassword(data, res);
       else if (url === "/api/heartbeat") handleHeartbeat(data, res);
+      else if (url === "/api/avatar") handleAvatar(data, res);
       else handleReport(data, res);
     }).catch(() => sendJSON(res, 400, { ok: false, error: "Invalid data sent." }));
     return;
   }
 
   // v8: blocked list aur reports padhna (GET).
+  if (req.method === "GET" && url.startsWith("/avatars/")) { handleGetAvatar(req, res); return; } // v24
   if (req.method === "GET" && url === "/api/blocks") { handleGetBlocks(req, res); return; }
   if (req.method === "GET" && url === "/api/coins") { handleGetCoins(req, res); return; }
   if (req.method === "GET" && url === "/api/profile") { handleGetProfile(req, res); return; }
@@ -704,12 +741,20 @@ const liveRooms = {}; // roomId -> { hostId, title, host, cat, cover }
 const GUEST_SEATS = 4;
 const guestSeats = {}; // roomId -> [ {seat, guestId, name, seq} | null x4 ]
 const guestSeq = {};   // roomId -> counter (tiles ki order ke liye)
+function avatarFor(name){ // v24: user ki profile photo ka URL
+  if (!name) return "";
+  try {
+    const users = loadUsers();
+    const key = findUserKey(users, name);
+    return (key && users[key].avatar) || "";
+  } catch (e) { return ""; }
+}
 function seatsFor(roomId){
   if (!guestSeats[roomId]) guestSeats[roomId] = [null, null, null, null];
   return guestSeats[roomId];
 }
 function seatsPayload(roomId){
-  return seatsFor(roomId).map(function(x){ return x ? { seat: x.seat, guestId: x.guestId, name: x.name, seq: x.seq } : null; });
+  return seatsFor(roomId).map(function(x){ return x ? { seat: x.seat, guestId: x.guestId, name: x.name, seq: x.seq, avatar: avatarFor(x.name) } : null; });
 }
 function broadcastSeats(roomId){
   io.to(roomId).emit("guest seats", { room: roomId, seats: seatsPayload(roomId) });
@@ -756,7 +801,7 @@ function roomHiddenFor(viewerName, hostName){
 function liveListFor(viewerName){
   return Object.keys(liveRooms)
     .filter((rid) => !roomHiddenFor(viewerName, liveRooms[rid].host))
-    .map((rid) => Object.assign({ room: rid }, liveRooms[rid]));
+    .map((rid) => Object.assign({ room: rid, hostAvatar: avatarFor(liveRooms[rid].host) }, liveRooms[rid]));
 }
 
 function emitChatToRoom(roomId, msg){

@@ -398,6 +398,7 @@
       .guest-tile .gavatar { display: none; }
       .guest-tile.audio .gavatar { display: flex; position: absolute; inset: 0; align-items: center; justify-content: center; font-size: 1.7rem; font-weight: 800; color: #fff; }
       .guest-tile.audio { background: linear-gradient(135deg, #3a2b5c, #1c1a2e); }
+      .round-btn.off { opacity: .45; }
       .guest-tile video { width: 100%; height: 100%; object-fit: cover; }
       .guest-tile .gname { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font-size: .62rem; font-weight: 700; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .guest-tile .gkick { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: .75rem; line-height: 1; cursor: pointer; pointer-events: auto; }
@@ -649,6 +650,12 @@
             <h2>Live Now</h2>
             <p id="roomCount"></p>
           </div>
+          <div class="mode-tabs" id="homeModeTabs">
+            <button type="button" class="mode-tab on" data-mode="all">All</button>
+            <button type="button" class="mode-tab" data-mode="multi">Multi-guest</button>
+            <button type="button" class="mode-tab" data-mode="video">LIVE</button>
+            <button type="button" class="mode-tab" data-mode="audio">Audio</button>
+          </div>
           <div class="grid" id="roomGrid"></div>
         </section>
 
@@ -713,6 +720,8 @@
                 <p id="profileLoc">Location off</p>
               </div>
             </div>
+            <button class="btn-cam" id="changePhotoBtn" type="button" style="margin-top:.6rem">Change photo</button>
+            <input type="file" id="avatarInput" accept="image/*" style="display:none" />
             <div class="badges">
               <span class="badge" id="levelBadge">Lv.1</span>
               <span class="badge host" id="hostBadge" style="display:none">Host</span>
@@ -983,6 +992,9 @@
             <button class="round-btn" id="guestBtn" type="button" aria-label="Join as guest">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3.2 2.9-4.8 5.5-4.8s4.7 1.6 5.5 4.8"/><path d="M16 8.5a2.6 2.6 0 100-5.2M17.5 14.6c1.9.6 3 1.9 3.4 4.4"/></svg>
             </button>
+            <button class="round-btn" id="soundBtn" type="button" aria-label="Sound on or off">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" fill="currentColor" stroke="none"/><path d="M15.5 9.2a4 4 0 010 5.6M18 6.8a7.5 7.5 0 010 10.4"/></svg>
+            </button>
             <button class="round-btn" id="giftBtn" type="button" aria-label="Send a gift">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="8" width="17" height="4"/><path d="M5 12v8.5h14V12M12 8v12.5M12 8s-4.5.2-4.5-2.3C7.5 3.6 10.8 3.4 12 8zm0 0s4.5.2 4.5-2.3C16.5 3.6 13.2 3.4 12 8z"/></svg>
             </button>
@@ -995,6 +1007,7 @@
           </div>
           <div class="room-actions" id="hostActions" style="display:none">
             <p style="margin:0;font-size:.82rem;opacity:.9;flex:1">You're live — viewers are joining!</p>
+            <button class="btn-cam" id="musicBtn" type="button">Music</button>
             <button class="btn-cam" id="camToggleBtn" type="button">Camera Off</button>
             <button class="btn-end" id="endLiveBtn" type="button">End Live</button>
           </div>
@@ -1005,6 +1018,14 @@
           <h3>Send a Gift</h3>
           <p class="bal-line">You have <b id="trayCoins">0</b> coins · Get 500 free coins daily from Profile</p>
           <div class="gift-grid" id="giftGrid"></div>
+        </div>
+
+        <!-- v24: Music — host gaane chalaye, sab ko awaz ke saath sunai de -->
+        <div class="gift-tray" id="musicTray">
+          <h3>Play Music</h3>
+          <p class="bal-line">Songs play in your live — everyone hears them with your voice.</p>
+          <div class="gift-grid" id="musicGrid"></div>
+          <button class="btn-cam" id="stopMusicBtn" type="button" style="margin-top:.6rem;display:none">Stop music</button>
         </div>
 
         <!-- v13: followers / following list -->
@@ -1138,12 +1159,18 @@
         $("statFollowing").textContent = fmtFull(n);
       }
       /* v13: Asli profile server se — number ID, asli followers/following, location. */
+      function setAvatar(el, url, initial){ // v24: photo ho to photo, warna pehla harf
+        if (!el) return;
+        if (url) { el.innerHTML = '<img src="' + url + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%" />'; }
+        else { el.textContent = initial || ""; }
+      }
       function refreshProfile(){
         if (!currentUser || window.location.protocol === "file:") return;
         fetch("/api/profile?name=" + encodeURIComponent(myName()) + "&viewer=" + encodeURIComponent(myName()))
           .then(function(r){ return r.json(); }).then(function(d){
             if (!d || !d.ok) return;
             lastProfile = d;
+            setAvatar($("profileAvatar"), d.avatar || "", myName().charAt(0)); // v24
             myNumericId = d.id;
             /* v15: Friends = mutual follows; Level badge; Fans Group count. */
             var fl = (d.followersList || []).map(function(n){ return n.toLowerCase(); });
@@ -1225,15 +1252,16 @@
             '<span class="live-badge">LIVE</span>' +
             '<span class="viewers">' + eyeSVG() + fmt(r.viewers) + '</span></span>' +
             '<span class="info"><p class="title">' + r.title + '</p>' +
-            '<span class="host-row"><span class="avatar" style="background:' + r.color + '">' + r.host.charAt(0) + '</span>' +
+            '<span class="host-row"><span class="avatar" style="background:' + r.color + '">' + (r.hostAvatar ? '<img src="' + r.hostAvatar + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%" />' : r.host.charAt(0)) + '</span>' +
             '<span class="name">' + r.host + '</span><span class="cat-tag">' + r.cat + '</span>' + (r.mode === 'audio' ? '<span class="cat-tag">Audio</span>' : r.mode === 'multi' ? '<span class="cat-tag">Multi-guest</span>' : '') + '</span></span>';
         }
         el.addEventListener("click", function(){ openRoom(r); });
         return el;
       }
+      var homeMode = 'all'; // v24: Home par rooms mode ke hisab se alag — Bigo ki tarah
       function renderHome(){
         var liveList = Object.keys(liveFeed).map(function(k){ return liveFeed[k]; })
-          .filter(function(r){ return currentCat === "All" || r.cat === currentCat; });
+          .filter(function(r){ return (homeMode === "all" || r.mode === homeMode) && (currentCat === "All" || r.cat === currentCat); });
         var list = liveList; // v19: REAL rooms only — demo rooms hata diye
         var fw = $("featWrap"); fw.innerHTML = "";
         var grid = $("roomGrid"); grid.innerHTML = "";
@@ -1258,6 +1286,13 @@
       }
       document.querySelectorAll(".tab").forEach(function(t){
         t.addEventListener("click", function(){ showScreen(t.getAttribute("data-screen")); });
+      });
+      document.querySelectorAll("#homeModeTabs .mode-tab").forEach(function(b){ // v24
+        b.addEventListener("click", function(){
+          homeMode = b.getAttribute("data-mode");
+          document.querySelectorAll("#homeModeTabs .mode-tab").forEach(function(x){ x.classList.toggle("on", x === b); });
+          renderHome();
+        });
       });
 
       /* ================= Chat ================= */
@@ -1473,6 +1508,70 @@
         renderCamBtn();
         if (socket && myLiveRoomId) socket.emit("camera state", { room: myLiveRoomId, on: on });
       }
+      var MUSIC_SONGS = [ // v24: sample gaane (host ke live mein chalte hain)
+        { name: "Song 1 — Chill", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
+        { name: "Song 2 — Beat", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
+        { name: "Song 3 — Groove", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" }
+      ];
+      var musicCtx = null, musicEl = null, musicSrc = null, musicDest = null, micSrc = null, micStream = null;
+      var musicOn = false, musicName = "";
+      function currentAudioTrack(){ // v24: music on ho to mic+music mixed track, warna mic
+        if (musicOn && musicDest) { var t = musicDest.stream.getAudioTracks()[0]; if (t) return t; }
+        return localStream ? localStream.getAudioTracks()[0] : null;
+      }
+      function swapHostAudioTrack(){
+        var tr = currentAudioTrack(); if (!tr) return;
+        Object.keys(hostPCs).forEach(function(id){
+          var pc = hostPCs[id]; if (!pc) return;
+          var sender = pc.getSenders().find(function(s){ return s.track && s.track.kind === 'audio'; });
+          if (sender) sender.replaceTrack(tr).catch(function(){});
+        });
+      }
+      function startMusic(song){
+        if (!localStream) { toast("Go live first, then play music."); return; }
+        try {
+          if (!musicCtx) {
+            musicCtx = new (window.AudioContext || window.webkitAudioContext)();
+            musicDest = musicCtx.createMediaStreamDestination();
+          }
+          if (musicCtx.state === "suspended") musicCtx.resume();
+          if (!musicEl) {
+            musicEl = new Audio(); musicEl.loop = true;
+            musicSrc = musicCtx.createMediaElementSource(musicEl);
+            musicSrc.connect(musicDest);
+          }
+          if (!micSrc || micStream !== localStream) {
+            if (micSrc) micSrc.disconnect();
+            micSrc = musicCtx.createMediaStreamSource(localStream);
+            micSrc.connect(musicDest);
+            micStream = localStream;
+          }
+          musicEl.src = song.url;
+          musicEl.play().catch(function(){ toast("Could not play this song."); });
+          musicOn = true; musicName = song.name;
+          swapHostAudioTrack();
+          renderMusicGrid();
+          toast("Playing: " + song.name);
+        } catch (e) { toast("Music is not supported in this browser."); }
+      }
+      function stopMusic(){
+        if (musicEl) musicEl.pause();
+        musicOn = false; musicName = "";
+        swapHostAudioTrack();
+        renderMusicGrid();
+      }
+      function renderMusicGrid(){
+        var g = $("musicGrid"); if (!g) return;
+        g.innerHTML = "";
+        MUSIC_SONGS.forEach(function(song){
+          var b = document.createElement("button");
+          b.type = "button"; b.className = "gift";
+          b.innerHTML = '<span class="gname">' + song.name + '</span>';
+          b.addEventListener("click", function(){ startMusic(song); });
+          g.appendChild(b);
+        });
+        $("stopMusicBtn").style.display = musicOn ? "" : "none";
+      }
       function hideRoomVideo(){
         var v = $("roomVideo");
         v.classList.remove("show");
@@ -1511,10 +1610,17 @@
           var av = tile.querySelector(".gavatar");
           var hasVideo = stream && stream.getVideoTracks().length > 0;
           tile.classList.toggle("audio", !hasVideo);
-          if (av) av.textContent = hasVideo ? "" : (seat.name || "G").charAt(0);
+          if (av) { // v24: audio guest ki photo ho to photo, warna harf
+            var seatAvatar = seat.avatar || (seat.seat === myGuestSeat && lastProfile ? lastProfile.avatar : "");
+            if (hasVideo) { av.innerHTML = ""; }
+            else if (seatAvatar) { av.innerHTML = '<img src="' + seatAvatar + '" alt="" style="width:3.2rem;height:3.2rem;object-fit:cover;border-radius:50%" />'; }
+            else { av.innerHTML = ""; av.textContent = (seat.name || "G").charAt(0); }
+          }
           nm.textContent = seat.name || "Guest";
           var stream = guestStreamFor(seat, i);
+          vid.muted = (!room.isHost && seat.seat === myGuestSeat); // v24: apni tile muted (echo na ho), baaki sab ki awaz aaye
           if (stream && vid.srcObject !== stream) { vid.srcObject = stream; vid.play().catch(function(){}); }
+          else if (stream) { vid.play().catch(function(){}); }
           else if (!stream && vid.srcObject) { vid.srcObject = null; }
           if (room && room.isHost) {
             kick.style.display = "";
@@ -1669,7 +1775,8 @@
           closePCFor(d.watcherId);
           var pc = new RTCPeerConnection(RTC_CONF);
           hostPCs[d.watcherId] = pc;
-          localStream.getTracks().forEach(function(t){ pc.addTrack(t, localStream); });
+          localStream.getTracks().forEach(function(t){ if (t.kind === 'video') pc.addTrack(t, localStream); });
+          var at = currentAudioTrack(); if (at) pc.addTrack(at, localStream); // v24: music on ho to mixed awaz
           // v20: maujooda guests ki video bhi naye viewer ko (apni khud ki nahi)
           seatsSorted().forEach(function(seat){
             if (seat.guestId === d.watcherId) return;
@@ -1950,12 +2057,15 @@
         $("roomHostName").textContent = host;
         $("roomHostFollowers").textContent = followers + " followers";
         var av = $("roomHostAvatar");
-        av.textContent = host.charAt(0); av.style.background = color;
+        av.style.background = color;
+        setAvatar(av, (room.data && room.data.hostAvatar) || (room.isHost && lastProfile ? lastProfile.avatar : ""), host.charAt(0)); // v24
         $("roomViewerCount").textContent = fmt(room.viewers);
         $("likeCount").textContent = fmt(room.likes);
         $("chatBox").innerHTML = "";
         $("hearts").innerHTML = "";
         $("giftTray").classList.remove("open");
+        $("musicTray").classList.remove("open"); // v24
+        if (musicOn) stopMusic();
         var fb = $("followBtn");
         fb.textContent = "Follow"; fb.classList.remove("following"); fb.style.display = "";
         // v8: host apne live ke watchers ko Block kar sakta hai
@@ -1970,6 +2080,7 @@
         viewerStreams = []; roomSeats = []; guestRequests = []; // v20: naye room ke liye saaf
         renderGuestBtn(); renderGuestRequests(); renderGuestTiles(); // v20
         if (room.isHost) { hostCamOn = true; } renderCamBtn(); // v23
+        $("soundBtn").classList.remove("off"); // v24
       }
       function startRoomLoops(pool, hostMode){
         clearTimers();
@@ -2007,6 +2118,7 @@
         renderGuestRequests(); // v20
         $("roomView").classList.remove("open");
         $("giftTray").classList.remove("open");
+        $("musicTray").classList.remove("open"); // v24
         $("userSheet").classList.remove("open"); // v8
         $("watcherPanel").style.display = "none"; // v8
       }
@@ -2117,6 +2229,12 @@
           $("giftTray").classList.remove("open");
         }).catch(function(){ toast("Gift could not be sent — check your connection."); $("giftTray").classList.remove("open"); });
       }
+      $("soundBtn").addEventListener("click", function(){ // v24: host ki awaz on/off
+        var v = $("roomVideo");
+        v.muted = !v.muted;
+        this.classList.toggle("off", v.muted);
+        toast(v.muted ? "Sound off." : "Sound on.");
+      });
       $("giftBtn").addEventListener("click", function(){
         setCoins(coins);
         $("giftTray").classList.toggle("open");
@@ -2170,7 +2288,7 @@
           var liveRoomId = "live-" + myName().toLowerCase().replace(/[^a-z0-9]/g, "");
           myLiveRoomId = liveRoomId;
           room = {
-            data: { title: title, host: myName(), cat: cat, mode: liveMode, multiGuest: liveMode !== 'video' },
+            data: { title: title, host: myName(), cat: cat, mode: liveMode, multiGuest: liveMode !== 'video', hostAvatar: lastProfile ? lastProfile.avatar : "" },
             isHost: true, viewers: 2, likes: 0, following: true,
             gifts: 0, giftValue: 0, elapsed: 0
           };
@@ -2219,6 +2337,7 @@
         stopCamera();
         hideRoomVideo();
         myLiveRoomId = null;
+        if (musicOn) stopMusic(); // v24
         hostCamOn = true; roomCamOff = false; // v23
         liveConfirmed = false;
         if (liveConfirmTimer) { clearTimeout(liveConfirmTimer); liveConfirmTimer = null; }
@@ -2242,7 +2361,31 @@
         renderHistory();
       }
       $("endLiveBtn").addEventListener("click", endLive);
+      $("changePhotoBtn").addEventListener("click", function(){ $("avatarInput").click(); }); // v24
+      $("avatarInput").addEventListener("change", function(){ // v24: photo 256px karke upload
+        var f = this.files && this.files[0]; if (!f) return;
+        if (!currentUser) { toast("Log in first."); return; }
+        var img = new Image();
+        img.onload = function(){
+          var cv = document.createElement("canvas");
+          var side = 256; cv.width = side; cv.height = side;
+          var ctx = cv.getContext("2d");
+          var s = Math.min(img.width, img.height), sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+          ctx.drawImage(img, sx, sy, s, s, 0, 0, side, side);
+          var dataUrl = cv.toDataURL("image/jpeg", 0.85);
+          fetch("/api/avatar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName(), image: dataUrl }) })
+            .then(function(r){ return r.json(); }).then(function(d){
+              if (d && d.ok) { if (lastProfile) lastProfile.avatar = d.avatar; setAvatar($("profileAvatar"), d.avatar, myName().charAt(0)); toast("Photo updated."); }
+              else toast(d && d.error ? d.error : "Could not save the photo.");
+            }).catch(function(){ toast("Could not save the photo — check your connection."); });
+        };
+        img.onerror = function(){ toast("Could not read that photo."); };
+        img.src = URL.createObjectURL(f);
+        this.value = "";
+      });
       $("camToggleBtn").addEventListener("click", function(){ if (room && room.isHost) setHostCam(!hostCamOn); }); // v23
+      $("musicBtn").addEventListener("click", function(){ renderMusicGrid(); $("musicTray").classList.toggle("open"); }); // v24
+      $("stopMusicBtn").addEventListener("click", function(){ stopMusic(); $("musicTray").classList.remove("open"); }); // v24
       $("guestBtn").addEventListener("click", function(){ // v20
         if (myGuestSeat) leaveGuest(); else requestGuest();
       });
@@ -2744,6 +2887,7 @@
       applyVideoQualityLabel(); // v15: Video Quality setting
       renderHome();
       renderGifts();
+      renderMusicGrid(); // v24
       renderCovers();
       renderReportReasons(); // v8
       setCoins(coins);
