@@ -387,6 +387,7 @@
       .guest-tiles { position: absolute; top: 74px; left: 10px; right: 10px; display: flex; gap: 6px; z-index: 5; pointer-events: none; }
       .guest-tile { flex: 1; max-width: 112px; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: #111; border: 2px solid rgba(255,255,255,.4); position: relative; display: none; }
       .guest-tile.on { display: block; }
+      .guest-tile.empty { display: block; background: rgba(255,255,255,.08); border: 2px dashed rgba(255,255,255,.35); }
       .guest-tile video { width: 100%; height: 100%; object-fit: cover; }
       .guest-tile .gname { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font-size: .62rem; font-weight: 700; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .guest-tile .gkick { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: .75rem; line-height: 1; cursor: pointer; pointer-events: auto; }
@@ -661,6 +662,10 @@
             <div class="field">
               <label>Choose a cover photo</label>
               <div class="covers" id="coverPick"></div>
+            </div>
+            <div class="priv-row">
+              <div class="txt"><h3>Multi-guest live</h3><p>Up to 4 guests can join your live on video. Viewers tap "Join as guest" and you approve them.</p></div>
+              <label class="switch"><input type="checkbox" id="multiGuestBtn" checked><span class="slider"></span></label>
             </div>
             <button class="btn-live" id="startLiveBtn" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="M15 10.5l7-3.5v10l-7-3.5" fill="currentColor" stroke="none"/></svg>
@@ -1450,8 +1455,8 @@
           var vid = tile.querySelector("video");
           var nm = tile.querySelector(".gname");
           var kick = tile.querySelector(".gkick");
-          if (!seat) { tile.classList.remove("on"); if (vid.srcObject) vid.srcObject = null; nm.textContent = ""; kick.style.display = "none"; continue; }
-          tile.classList.add("on");
+          if (!seat) { tile.classList.remove("on"); if (vid.srcObject) vid.srcObject = null; kick.style.display = "none"; if (room && room.isHost) { tile.classList.add("empty"); nm.textContent = "Empty seat"; } else { tile.classList.remove("empty"); nm.textContent = ""; } continue; }
+          tile.classList.add("on"); tile.classList.remove("empty");
           nm.textContent = seat.name || "Guest";
           var stream = guestStreamFor(seat, i);
           if (stream && vid.srcObject !== stream) { vid.srcObject = stream; vid.play().catch(function(){}); }
@@ -1465,6 +1470,7 @@
       function renderGuestBtn(){
         var b = $("guestBtn"); if (!b) return;
         if (!room || room.isHost) { b.style.display = "none"; return; }
+        if (room.data && room.data.multiGuest === false) { b.style.display = "none"; return; } // v22: host ne multi-guest band kiya
         b.style.display = "";
         if (myGuestSeat) { b.classList.add("guest-on"); b.setAttribute("aria-label", "Leave guest seat"); }
         else { b.classList.remove("guest-on"); b.setAttribute("aria-label", guestRequested ? "Guest request sent" : "Join as guest"); }
@@ -1550,7 +1556,8 @@
             liveFeed[info.room] = {
               id: info.room, title: info.title || "Live", host: info.host || "Host",
               cat: info.cat || "Chat", viewers: 2, likes: 0, followers: 0,
-              color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer"
+              color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer",
+              multiGuest: info.multiGuest !== false
             };
           });
           Object.keys(liveFeed).forEach(function(k){ if (!keep[k]) delete liveFeed[k]; });
@@ -1561,7 +1568,8 @@
           liveFeed[info.room] = {
             id: info.room, title: info.title || "Live", host: info.host || "Host",
             cat: info.cat || "Chat", viewers: 2, likes: 0, followers: 0,
-            color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer"
+            color: "#7a4fd0", img: (info.cover && IMG[info.cover]) ? info.cover : "singer",
+            multiGuest: info.multiGuest !== false
           };
           renderHome();
           if (room && room.isHost && info.room === myLiveRoomId && !liveConfirmed) { liveConfirmed = true; if (liveConfirmTimer) { clearTimeout(liveConfirmTimer); liveConfirmTimer = null; } toast("Congrats! You're live"); }
@@ -1788,7 +1796,7 @@
         s.on("guest request failed", function(d){
           guestRequested = false;
           renderGuestBtn();
-          toast(d && d.reason === "full" ? "All guest seats are full." : "Could not join as guest.");
+          toast(d && d.reason === "full" ? "All guest seats are full." : d && d.reason === "off" ? "Multi-guest is off for this live." : "Could not join as guest.");
         });
         s.on("guest removed", function(d){
           if (!d || d.room !== currentRoomId) return;
@@ -2077,6 +2085,8 @@
           n.textContent = "You're on the live app — the camera works directly here. Tap Go Live and allow camera access when your phone asks.";
         }
       })();
+      var multiGuestOn = true; // v22: Go Live screen ka Multi-guest switch
+      $("multiGuestBtn").addEventListener("change", function(){ multiGuestOn = this.checked; });
       $("startLiveBtn").addEventListener("click", function(){
         var title = $("liveTitle").value.trim() || "My first live — hello everyone!";
         var cat = $("liveCat").value;
@@ -2091,7 +2101,7 @@
           var liveRoomId = "live-" + myName().toLowerCase().replace(/[^a-z0-9]/g, "");
           myLiveRoomId = liveRoomId;
           room = {
-            data: { title: title, host: myName(), cat: cat },
+            data: { title: title, host: myName(), cat: cat, multiGuest: multiGuestOn },
             isHost: true, viewers: 2, likes: 0, following: true,
             gifts: 0, giftValue: 0, elapsed: 0
           };
@@ -2100,7 +2110,7 @@
           joinChatRoom(liveRoomId);
           var s = connectSocket();
           if (s && window.location.protocol !== "file:") {
-            s.emit("go live", { room: liveRoomId, title: title, host: myName(), cat: cat, cover: chosenCover });
+            s.emit("go live", { room: liveRoomId, title: title, host: myName(), cat: cat, cover: chosenCover, multiGuest: multiGuestOn });
           }
           $("followBtn").style.display = "none";
           $("roomViewerCount").textContent = "2";
@@ -2111,7 +2121,7 @@
           liveConfirmTimer = setTimeout(function(){
             if (liveConfirmed || !myLiveRoomId) return;
             var s2 = connectSocket();
-            if (s2) { s2.emit("join room", myLiveRoomId); s2.emit("go live", { room: myLiveRoomId, title: title, host: myName(), cat: cat, cover: chosenCover }); }
+            if (s2) { s2.emit("join room", myLiveRoomId); s2.emit("go live", { room: myLiveRoomId, title: title, host: myName(), cat: cat, cover: chosenCover, multiGuest: multiGuestOn }); }
             toast("Live start nahi hua — dobara try kar raha hoon…");
             liveConfirmTimer = setTimeout(function(){
               if (liveConfirmed || !myLiveRoomId) return;

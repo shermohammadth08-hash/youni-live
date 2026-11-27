@@ -885,7 +885,7 @@ io.on("connection", (sock) => {
     const host = typeof data.host === "string" ? data.host.slice(0, 30) : "Host";
     const cat = typeof data.cat === "string" ? data.cat.slice(0, 20) : "Chat";
     const cover = typeof data.cover === "string" ? data.cover.slice(0, 30) : "singer";
-    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover };
+    liveRooms[roomId] = { hostId: sock.id, title: title, host: host, cat: cat, cover: cover, multiGuest: data.multiGuest !== false }; // v22
     if (!sock.data.userName) sock.data.userName = host;
     emitLiveStarted(Object.assign({ room: roomId }, liveRooms[roomId]));
   });
@@ -904,6 +904,7 @@ io.on("connection", (sock) => {
     const name = cleanName(data.name) || (sock.data && sock.data.userName) || "Guest";
     const live = liveRooms[roomId];
     if (!live) return;
+    if (live.multiGuest === false) { sock.emit("guest request failed", { room: roomId, reason: "off" }); return; } // v22
     if (socketRoom[sock.id] !== roomId) return;
     if (roomHiddenFor(name, live.host)) { sock.emit("guest request failed", { room: roomId, reason: "blocked" }); return; }
     if (seatsFor(roomId).some((x) => x && x.guestId === sock.id)) return; // pehle se guest hai
