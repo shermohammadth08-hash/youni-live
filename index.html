@@ -571,6 +571,7 @@
         box-shadow: 0 -8px 30px rgba(0,0,0,.35);
       }
       .gift-tray.open { transform: translateY(0); }
+      .tray-x { position: absolute; top: .7rem; right: .8rem; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: rgba(0,0,0,.25); color: var(--ink); font-size: .95rem; line-height: 1; cursor: pointer; } /* v30: tray band karne ka X */
       .gift-tray h3 { margin: 0 0 .2rem; font-size: .98rem; }
       .gift-tray .bal-line { font-size: .8rem; color: var(--ink-soft); margin: 0 0 .8rem; }
       .gift-tray .bal-line b { color: var(--gold); }
@@ -1074,6 +1075,7 @@
 
         <!-- gift tray -->
         <div class="gift-tray" id="giftTray">
+          <button class="tray-x" id="giftTrayX" type="button" aria-label="Close">✕</button>
           <h3>Send a Gift</h3>
           <p class="bal-line">You have <b id="trayCoins">0</b> coins · Get 500 free coins daily from Profile</p>
           <div class="gift-grid" id="giftGrid"></div>
@@ -1081,6 +1083,7 @@
 
         <!-- v26: Theme — host background badle, sab ko dikhe -->
         <div class="gift-tray" id="themeTray">
+          <button class="tray-x" id="themeTrayX" type="button" aria-label="Close">✕</button>
           <h3>Room Background</h3>
           <p class="bal-line">Pick a background — everyone in the room sees it change.</p>
           <div class="covers" id="themeGrid"></div>
@@ -1089,6 +1092,7 @@
 
         <!-- v28: PK — doosre live host ko challenge karein -->
         <div class="gift-tray" id="pkTray">
+          <button class="tray-x" id="pkTrayX" type="button" aria-label="Close">✕</button>
           <h3>PK Battle</h3>
           <p class="bal-line">Challenge another live host — 5 minutes, gifts decide the winner.</p>
           <div id="pkList"></div>
@@ -1096,10 +1100,11 @@
 
         <!-- v24: Music — host gaane chalaye, sab ko awaz ke saath sunai de -->
         <div class="gift-tray" id="musicTray">
+          <button class="tray-x" id="musicTrayX" type="button" aria-label="Close">✕</button>
           <h3>Play Music</h3>
           <p class="bal-line">Songs play in your live — everyone hears them with your voice.</p>
           <button class="btn-cam" id="galleryMusicBtn" type="button" style="margin-bottom:.6rem">Pick from Gallery</button>
-          <input type="file" id="galleryMusicFile" accept="audio/*" style="display:none" />
+          <input type="file" id="galleryMusicFile" accept="audio/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" />
           <p class="bal-line" id="musicNow" style="display:none"></p>
           <div class="gift-grid" id="musicGrid"></div>
           <div style="display:flex;align-items:center;gap:.6rem;margin-top:.6rem"><span style="font-size:.82rem;opacity:.85">Music volume</span><input type="range" id="musicVol" min="0" max="100" value="80" style="flex:1" /></div>
@@ -1628,7 +1633,13 @@
         { id: "g3", name: "Ocean", css: "linear-gradient(160deg,#1a2980,#26d0ce)" },
         { id: "g4", name: "Forest", css: "linear-gradient(160deg,#134e5e,#71b280)" },
         { id: "g5", name: "Rose", css: "linear-gradient(160deg,#642b73,#c6426e)" },
-        { id: "g6", name: "Golden", css: "linear-gradient(160deg,#3a1c71,#d76d77 55%,#ffaf7b)" }
+        { id: "g6", name: "Golden", css: "linear-gradient(160deg,#3a1c71,#d76d77 55%,#ffaf7b)" },
+        { id: "g7", name: "Royal Gold", css: "radial-gradient(120% 90% at 20% 0%,#f6d365 0%,transparent 45%),linear-gradient(160deg,#1a0f00,#3d2b00 45%,#b8860b 75%,#1a0f00)" },
+        { id: "g8", name: "Neon Nights", css: "radial-gradient(100% 70% at 80% 10%,#ff2ea6 0%,transparent 50%),radial-gradient(90% 80% at 10% 90%,#00e5ff 0%,transparent 55%),linear-gradient(160deg,#0b0033,#2b0057 55%,#12002e)" },
+        { id: "g9", name: "Ocean Deep", css: "radial-gradient(110% 80% at 15% 10%,#7ef0ff 0%,transparent 42%),linear-gradient(160deg,#001f3f,#003a6b 45%,#00b4a2 80%,#001f3f)" },
+        { id: "g10", name: "Rose Luxe", css: "radial-gradient(100% 70% at 85% 0%,#ffd6e0 0%,transparent 48%),linear-gradient(160deg,#2b0a1e,#7b1e4b 50%,#e58aa5 82%,#2b0a1e)" },
+        { id: "g11", name: "Emerald", css: "radial-gradient(100% 75% at 20% 0%,#a8f0c6 0%,transparent 45%),linear-gradient(160deg,#021a12,#045c32 50%,#c9a227 85%,#021a12)" },
+        { id: "g12", name: "Sunset Glow", css: "radial-gradient(110% 80% at 50% 0%,#ffe29a 0%,transparent 50%),linear-gradient(160deg,#2a0a3d,#ff416c 45%,#ff8a3d 75%,#2a0a3d)" }
       ];
       var currentTheme = "singer"; // v26
       function themeIsGradient(theme){ return THEMES.some(function(t){ return t.id === theme; }); }
@@ -1637,10 +1648,10 @@
         var mode = room && room.data ? room.data.mode : "";
         if (mode === 'video') { bg.style.display = "none"; th.style.display = "none"; return; } // v29: plain LIVE mein background nahi
         var g = THEMES.find(function(t){ return t.id === theme; });
-        if (g) { bg.style.display = "none"; th.style.background = g.css; th.style.display = ""; }
-        else { th.style.display = "none"; bg.src = IMG[theme] || IMG["singer"]; bg.style.display = ""; }
+        if (g) { bg.style.display = "none"; th.style.background = g.css; th.style.display = "block"; } // v30 FIX: "" wapas CSS display:none par le jata tha — gradient kabhi dikhta hi nahi tha
+        else { th.style.display = "none"; bg.src = IMG[theme] || IMG["singer"]; bg.style.display = "block"; }
       }
-      function roomBgShow(){ var mode = room && room.data ? room.data.mode : ""; if (mode === 'video') { roomBgHide(); return; } if (themeIsGradient(currentTheme)) { $("roomBg").style.display = "none"; $("roomBgTheme").style.display = ""; } else { $("roomBgTheme").style.display = "none"; $("roomBg").style.display = ""; } }
+      function roomBgShow(){ var mode = room && room.data ? room.data.mode : ""; if (mode === 'video') { roomBgHide(); return; } if (themeIsGradient(currentTheme)) { $("roomBg").style.display = "none"; $("roomBgTheme").style.display = "block"; } else { $("roomBgTheme").style.display = "none"; $("roomBg").style.display = "block"; } } // v30 FIX: block, "" nahi
       function roomBgHide(){ $("roomBg").style.display = "none"; $("roomBgTheme").style.display = "none"; }
       function showRoomVideo(stream, muted){
         var v = $("roomVideo");
@@ -2719,6 +2730,10 @@
       $("pkRejectBtn").addEventListener("click", function(){ if (socket && pkInviteFrom) socket.emit("pk reject", { fromRoom: pkInviteFrom }); $("pkInvite").classList.remove("show"); clearTimeout(pkInviteTimer); pkInviteFrom = null; }); // v28
       $("pkResultCloseBtn").addEventListener("click", function(){ $("pkResult").classList.remove("show"); }); // v28
       $("themeBtn").addEventListener("click", function(){ renderThemeGrid(); $("themeTray").classList.toggle("open"); }); // v26
+      $("themeTrayX").addEventListener("click", function(){ $("themeTray").classList.remove("open"); }); // v30: tray band karein
+      $("musicTrayX").addEventListener("click", function(){ $("musicTray").classList.remove("open"); }); // v30
+      $("pkTrayX").addEventListener("click", function(){ $("pkTray").classList.remove("open"); }); // v30
+      $("giftTrayX").addEventListener("click", function(){ $("giftTray").classList.remove("open"); }); // v30
       $("musicBtn").addEventListener("click", function(){ renderMusicGrid(); $("musicTray").classList.toggle("open"); }); // v24
       $("stopMusicBtn").addEventListener("click", function(){ stopMusic(); $("musicTray").classList.remove("open"); }); // v24
       $("galleryMusicBtn").addEventListener("click", function(){ $("galleryMusicFile").click(); }); // v29: apni gallery se gaana
