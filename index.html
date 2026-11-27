@@ -402,9 +402,9 @@
       #roomView.audio-mode #roomScroll { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
       #roomView.audio-mode .room-bottom { position: relative; flex-shrink: 0; display: flex; flex-direction: column; max-height: 38dvh; } /* v45: neeche wala hissa chhota — upar seats ko 62dvh mile, dono rows dikhein */ /* v44: neeche wala hissa bandha hua — seats kabhi nahi chhupengi, chat andar scroll hogi */
       #roomView.audio-mode .chat { flex: 0 1 auto; min-height: 0; } /* v44: chat dabao — jagah kam ho to chat chhoti hogi, seats ko jagah milegi */
-      #roomView.audio-mode .watcher-panel, #roomView.audio-mode #hostActions, #roomView.audio-mode #viewerActions { flex-shrink: 0; }
+      #roomView.audio-mode #hostActions, #roomView.audio-mode #viewerActions { flex-shrink: 0; }
       #roomView.audio-mode .chat { max-height: 18dvh; mask-image: none; -webkit-mask-image: none; } /* v45: chat thodi chhoti — seats ko jagah mile */ /* v41: chat thodi unchi + upar wala fade hata diya — line aadhi/kati hui na dikhe */
-      #roomView.audio-mode .watcher-panel { max-height: 8dvh; overflow-y: auto; } /* v45: panel thoda chhota */ /* v42: viewers panel chhota — chat bharne par seats kabhi chhupen gi nahi */
+      #roomView.audio-mode  /* v42: viewers panel chhota — chat bharne par seats kabhi chhupen gi nahi */
       #pkVideo { display: none; position: absolute; top: 170px; right: 10px; width: calc(50% - 14px); height: 38%; border-radius: 16px; object-fit: cover; background: #000; z-index: 4; }
       #pkVideo.show { display: block; }
       #roomView.pk-mode .room-video.show { top: 170px; left: 10px; right: auto; bottom: auto; width: calc(50% - 14px); height: 38%; border-radius: 16px; }
@@ -485,7 +485,7 @@
       .pp-manage { position: absolute; top: .5rem; right: .6rem; height: 30px; padding: 0 .7rem; border-radius: 15px; border: none; background: #b8860b; color: #fff; font-size: .82rem; font-weight: 700; line-height: 1; cursor: pointer; } /* v35: Manage button bara aur saaf — sunehra pill */
       .pp-info { font-size: .75rem; opacity: .7; margin: .1rem 0 .4rem; }
       .round-btn.guest-on { background: #e8334d; color: #fff; }
-      .guest-reqs { border-top: 1px solid rgba(255,255,255,.15); margin-top: .5rem; padding-top: .5rem; }
+      
       .viewer-live-badge { position: relative; z-index: 3; margin: .45rem .85rem 0; display: none; align-items: center; gap: .35rem; font-size: .74rem; font-weight: 800; }
       .viewer-live-badge.show { display: inline-flex; }
       .viewer-live-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; animation: pulse 1s infinite; }
@@ -513,8 +513,8 @@
       .room-top .spacer { flex: 1; }
       .room-viewers {
         background: rgba(10,10,16,.55); border-radius: 999px; padding: .4rem .6rem;
-        font-size: .76rem; font-weight: 700; display: inline-flex; gap: .3rem; align-items: center;
-      }
+        font-size: .76rem; font-weight: 700; display: inline-flex; gap: .3rem; align-items: center; cursor: pointer;
+      } /* v48: eye icon tappable — tap par viewers list khule */
       .room-viewers svg { width: 13px; height: 13px; }
       .close-btn {
         width: 2.4rem; height: 2.4rem; border-radius: 50%; border: none; cursor: pointer;
@@ -663,11 +663,7 @@
 
       /* ---------- v8: Report / Block ---------- */
       .who-click { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
-      .watcher-panel {
-        position: relative; z-index: 3; background: rgba(10,10,16,.55); border-radius: 12px;
-        padding: .5rem .65rem; margin-bottom: .55rem; max-height: 20dvh; overflow-y: auto;
-      }
-      .watcher-panel .whead { font-size: .78rem; font-weight: 800; opacity: .9; margin-bottom: .25rem; }
+
       .watcher-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .32rem 0; font-size: .83rem; }
       .watcher-row .wname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .watcher-block {
@@ -1046,7 +1042,7 @@
           </div>
           <button class="follow-btn" id="followBtn" type="button">Follow</button>
           <div class="spacer"></div>
-          <span class="room-viewers">
+          <span class="room-viewers" id="viewerEyeBtn" role="button" aria-label="Viewers" title="Viewers">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5c5 0 9.3 3 11 7-1.7 4-6 7-11 7S2.7 16 1 12c1.7-4 6-7 11-7zm0 2C8.2 7 4.8 9 3.2 12 4.8 15 8.2 17 12 17s7.2-2 8.8-5C19.2 9 15.8 7 12 7zm0 1.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/></svg>
             <span id="roomViewerCount">0</span>
           </span>
@@ -1065,14 +1061,6 @@
         <div class="gift-burst" id="giftBurst"><div class="inner" id="giftBurstInner"></div></div>
 
         <div class="room-bottom">
-          <div class="watcher-panel" id="watcherPanel" style="display:none">
-            <div class="whead">Viewers in your live</div>
-            <div id="watcherList"></div>
-            <div class="guest-reqs" id="guestReqPanel" style="display:none">
-              <div class="whead">Guest requests</div>
-              <div id="guestReqList"></div>
-            </div>
-          </div>
           <div class="chat" id="chatBox"></div>
           <div class="room-actions" id="viewerActions">
             <form class="chat-input" id="chatForm">
@@ -1112,6 +1100,11 @@
           <h3>Send a Gift</h3>
           <p class="bal-line">You have <b id="trayCoins">0</b> coins · Get 500 free coins daily from Profile</p>
           <div class="gift-grid" id="giftGrid"></div>
+        <div class="gift-tray" id="viewersTray">
+          <button class="tray-x" id="viewersTrayX" type="button" aria-label="Close">✕</button>
+          <h3>Viewers</h3>
+          <div id="viewersTrayList"></div>
+        </div>
         </div>
 
         <!-- v26: Theme — host background badle, sab ko dikhe -->
@@ -2270,10 +2263,17 @@
           if (d.room !== myRoom) return;
           room.viewers = d.count;
           $("roomViewerCount").textContent = fmt(d.count);
-          if (room.isHost && d.viewers) { // v44: host ki viewers list khud theek ho jaye — server jo naam bhejta hai woh list mein daal dein
-            var _chg = false;
-            d.viewers.forEach(function(v){ if (v && v.id && v.name && !watchers[v.id]) { watchers[v.id] = v.name; _chg = true; } });
-            if (_chg) renderWatcherList();
+          if (d.viewers) { // v48: eye icon wali viewers list — host aur guest dono ko naam dikhein
+            if (room.isHost) { // v44: host ki list — naam jodte jayein
+              var _chg = false;
+              d.viewers.forEach(function(v){ if (v && v.id && v.name && !watchers[v.id]) { watchers[v.id] = v.name; _chg = true; } });
+              if (_chg) renderWatcherList();
+            } else { // guest: server ki list se sync karein (naam hatayein jo chale gaye)
+              var _nv = {};
+              d.viewers.forEach(function(v){ if (v && v.id && v.name) _nv[v.id] = v.name; });
+              watchers = _nv;
+              renderWatcherList();
+            }
           }
         });
         s.on("watcher", function(d){
@@ -2605,7 +2605,7 @@
         // v8: host apne live ke watchers ko Block kar sakta hai
         watchers = {};
         renderWatcherList();
-        $("watcherPanel").style.display = room.isHost ? "" : "none";
+        
         $("viewerActions").style.display = "flex"; // v45: host bhi wahi chat row use kare jo guest karta hai — ek hi pill, ek hi Send, ek hi jagah
         $("hostActions").style.display = room.isHost ? "flex" : "none";
         $("guestBtn").style.display = room.isHost ? "none" : ""; // v45: host ke liye Join-as-guest nahi
@@ -2651,10 +2651,11 @@
         $("musicTray").classList.remove("open"); // v24
         $("themeTray").classList.remove("open"); // v26
         $("pkTray").classList.remove("open"); // v28
+        $("viewersTray").classList.remove("open"); // v48
         $("pkResult").classList.remove("show"); // v28
         cleanupPk(); // v28
         $("userSheet").classList.remove("open"); // v8
-        $("watcherPanel").style.display = "none"; // v8
+        
       }
       $("closeRoomBtn").addEventListener("click", function(){
         if (room && room.isHost) { endLive(); } else { closeRoom(); }
@@ -2775,7 +2776,7 @@
         setCoins(coins);
         $("giftTray").classList.toggle("open");
       });
-      $("roomBg").addEventListener("click", function(){ $("giftTray").classList.remove("open"); });
+      $("roomBg").addEventListener("click", function(){ $("giftTray").classList.remove("open"); $("viewersTray").classList.remove("open"); });
 
       /* ================= Go Live ================= */
       var chosenCover = "singer";
@@ -3010,6 +3011,8 @@
       $("musicTrayX").addEventListener("click", function(){ $("musicTray").classList.remove("open"); }); // v30
       $("pkTrayX").addEventListener("click", function(){ $("pkTray").classList.remove("open"); }); // v30
       $("giftTrayX").addEventListener("click", function(){ $("giftTray").classList.remove("open"); }); // v30
+      $("viewerEyeBtn").addEventListener("click", function(){ renderWatcherList(); $("viewersTray").classList.add("open"); }); // v48: eye icon par tap — viewers list khule
+      $("viewersTrayX").addEventListener("click", function(){ $("viewersTray").classList.remove("open"); });
       $("musicBtn").addEventListener("click", function(){ renderMusicGrid(); $("musicTray").classList.toggle("open"); }); // v24
       $("stopMusicBtn").addEventListener("click", function(){ stopMusic(); $("musicTray").classList.remove("open"); }); // v24
       $("galleryMusicBtn").addEventListener("click", function(){ $("galleryMusicFile").click(); }); // v29: apni gallery se gaana
@@ -3350,8 +3353,8 @@
       // v32: Host ke live view mein watchers — sirf naam (Block button hata diya); tap par profile popup
       var roomAdmins = []; // v32: is room ke admins (names, lowercase)
       function isRoomAdminName(n){ return !!n && roomAdmins.some(function(a){ return (a || "").toLowerCase() === (n || "").toLowerCase(); }); }
-      function renderWatcherList(){
-        var list = $("watcherList"); if (!list) return;
+      function renderWatcherList(){ // v48: viewers list ab eye icon wali tray mein dikhti hai (inline panel khatam)
+        var list = $("viewersTrayList"); if (!list) return;
         list.innerHTML = "";
         var ids = Object.keys(watchers);
         if (!ids.length) { list.innerHTML = '<div style="font-size:.8rem;opacity:.75">No viewers yet.</div>'; return; }
@@ -3364,6 +3367,7 @@
           nm.className = "wname"; nm.textContent = name + (seat ? " · Guest" : "") + (isRoomAdminName(name) ? " · Admin" : "");
           row.appendChild(nm);
           row.addEventListener("click", function(){
+            $("viewersTray").classList.remove("open");
             openUserProfile({ name: name, watcherId: id, guestId: seat ? seat.guestId : null, seat: seat ? seat.seat : 0, avatar: seat ? seat.avatar : "", isAdmin: isRoomAdminName(name), isHost: room && room.data && room.data.host === name, isSelf: name === myName() }); // v36: apni row ho to isSelf
           });
           list.appendChild(row);
